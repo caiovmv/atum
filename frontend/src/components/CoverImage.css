@@ -1,0 +1,29 @@
+.cover-image {
+  object-fit: cover;
+  background: var(--atum-card-hover);
+  flex-shrink: 0;
+}
+
+.cover-image--card {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 6px;
+  margin-bottom: 0.75rem;
+}
+
+.cover-image--thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 4px;
+}
+
+.cover-image--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--atum-text-muted);
+}
+
+.cover-image-dots {
+  font-size: 1.2rem;
+}

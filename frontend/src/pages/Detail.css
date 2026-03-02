@@ -1,0 +1,158 @@
+.detail-page {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.detail-message {
+  color: var(--atum-text-muted);
+  margin-bottom: 1rem;
+}
+
+.detail-back-link {
+  display: inline-block;
+  margin-top: 0.5rem;
+}
+
+.detail-nav {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.detail-nav-btn {
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  border: none;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  background: var(--atum-card);
+  color: var(--atum-text);
+}
+
+.detail-nav-btn.back:hover {
+  background: var(--atum-card-hover);
+}
+
+.detail-nav-btn.primary.add {
+  background: var(--atum-accent);
+  color: #fff;
+}
+
+.detail-nav-btn.primary.add:hover:not(:disabled) {
+  background: var(--atum-accent-hover);
+}
+
+.detail-nav-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.detail-header {
+  margin-bottom: 1.5rem;
+}
+
+.detail-footer {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--atum-border);
+}
+
+.detail-loading,
+.detail-error {
+  color: var(--atum-text-muted);
+  margin-bottom: 1rem;
+}
+
+.detail-error {
+  color: #e74c3c;
+}
+
+.detail-backdrop {
+  height: 200px;
+  background-size: cover;
+  background-position: center;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.detail-tmdb-content {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.detail-poster-wrap {
+  flex-shrink: 0;
+}
+
+.detail-poster {
+  width: 220px;
+  height: auto;
+  border-radius: 8px;
+  display: block;
+}
+
+.detail-meta-wrap {
+  flex: 1;
+  min-width: 200px;
+}
+
+.detail-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.detail-vote,
+.detail-genres,
+.detail-runtime,
+.detail-date {
+  margin: 0.25rem 0;
+  color: var(--atum-text-muted);
+  font-size: 0.95rem;
+}
+
+.detail-overview {
+  margin-top: 1rem;
+}
+
+.detail-overview h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.detail-overview p {
+  margin: 0;
+  line-height: 1.5;
+  color: var(--atum-text);
+}
+
+.detail-torrent {
+  margin-top: 2rem;
+  padding: 1rem;
+  background: var(--atum-card);
+  border-radius: 8px;
+}
+
+.detail-torrent h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--atum-text-muted);
+}
+
+.detail-torrent-title {
+  margin: 0 0 0.5rem;
+  font-weight: 500;
+}
+
+.detail-torrent-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  color: var(--atum-text-muted);
+  font-size: 0.9rem;
+}

@@ -1,0 +1,90 @@
+services:
+  frontend:
+    image: ghcr.io/caiovmv/atum-frontend:v0.2.0
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+    networks:
+      - dl-torrent
+
+  api:
+    image: ghcr.io/caiovmv/atum-api:v0.2.0
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["uvicorn", "app.web.app:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      - DATABASE_URL=postgresql://dluser:dlpass@postgres:5432/dltorrent
+      - REDIS_URL=redis://redis:6379/0
+      - DOWNLOAD_RUNNER_URL=http://runner:9092
+      - TMDB_API_KEY=${TMDB_API_KEY:-}
+      - COVERS_DIR=/app/covers
+    volumes:
+      - api_covers:/app/covers
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - dl-torrent
+
+  runner:
+    image: ghcr.io/caiovmv/atum-runner:v0.2.0
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["uvicorn", "app.runner.app:app", "--host", "0.0.0.0", "--port", "9092"]
+    environment:
+      - DATABASE_URL=postgresql://dluser:dlpass@postgres:5432/dltorrent
+      - REDIS_URL=redis://redis:6379/0
+      - DOWNLOAD_DIR=/app/downloads
+      - COVERS_DIR=/app/covers
+    volumes:
+      - runner_downloads:/app/downloads
+      - api_covers:/app/covers
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - dl-torrent
+
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: dluser
+      POSTGRES_PASSWORD: dlpass
+      POSTGRES_DB: dltorrent
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/schema_postgres.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dluser -d dltorrent"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dl-torrent
+
+  redis:
+    image: redis:latest
+    volumes:
+      - redis_data:/data
+    networks:
+      - dl-torrent
+
+networks:
+  dl-torrent:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  api_covers:
+  runner_downloads:

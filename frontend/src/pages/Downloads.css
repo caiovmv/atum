@@ -1,0 +1,204 @@
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.downloads-page .atum-page-title {
+  margin: 0 0 1.5rem;
+  font-size: 1.75rem;
+  font-weight: 600;
+}
+
+.downloads-toast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  background: var(--atum-card);
+  border: 1px solid var(--atum-border);
+  border-radius: 8px;
+}
+.downloads-toast-dismiss {
+  background: none;
+  border: none;
+  color: var(--atum-text-muted);
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 0 0.25rem;
+}
+
+.downloads-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.downloads-modal {
+  background: var(--atum-bg);
+  border: 1px solid var(--atum-border);
+  border-radius: 8px;
+  padding: 1.5rem;
+  min-width: 280px;
+}
+.downloads-modal h2 { margin: 0 0 0.5rem; font-size: 1.1rem; }
+.downloads-modal p { margin: 0 0 1rem; color: var(--atum-text-muted); }
+.downloads-modal-actions { display: flex; gap: 0.75rem; }
+
+.downloads-last-updated {
+  color: var(--atum-text-muted);
+  font-size: 0.85rem;
+  align-self: center;
+}
+
+.progress-bar-wrap {
+  height: 6px;
+  background: var(--atum-border);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 0.25rem;
+  max-width: 120px;
+}
+.progress-bar {
+  height: 100%;
+  background: var(--atum-accent);
+  transition: width 0.2s;
+}
+.progress-text { display: block; }
+
+.downloads-cards {
+  display: none;
+}
+.download-card {
+  display: flex;
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--atum-card);
+  border-radius: 8px;
+  margin-bottom: 0.75rem;
+  border: 1px solid var(--atum-border);
+}
+.download-card-cover { flex-shrink: 0; }
+.download-card-body { flex: 1; min-width: 0; }
+.download-card-name { font-weight: 500; margin-bottom: 0.25rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.download-card-meta { font-size: 0.85rem; color: var(--atum-text-muted); margin-bottom: 0.5rem; }
+.download-card-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.download-card-actions button { min-height: 36px; }
+.downloads-cards .progress-bar-wrap { max-width: 100%; }
+
+.downloads-toolbar {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.downloads-error {
+  color: #e74c3c;
+  margin-bottom: 1rem;
+}
+
+.downloads-loading,
+.downloads-empty {
+  color: var(--atum-text-muted);
+}
+
+.downloads-table-wrap {
+  overflow-x: auto;
+}
+
+.downloads-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.cover-th { width: 56px; text-align: center; }
+.cover-cell { width: 56px; padding: 0.4rem; vertical-align: middle; }
+
+.downloads-table th,
+.downloads-table td {
+  padding: 0.6rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--atum-border);
+}
+
+.downloads-table th {
+  color: var(--atum-text-muted);
+  font-weight: 500;
+  font-size: 0.85rem;
+}
+
+.downloads-table td button {
+  margin-right: 0.5rem;
+}
+
+.name-cell {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status {
+  text-transform: lowercase;
+}
+
+.status-queued { color: var(--atum-text-muted); }
+.status-downloading { color: var(--atum-accent); }
+.status-paused { color: #f39c12; }
+.status-completed { color: #2ecc71; }
+.status-failed { color: #e74c3c; }
+
+@media (max-width: 768px) {
+  .downloads-page .atum-page-title {
+    font-size: 1.4rem;
+    margin-bottom: 1rem;
+  }
+
+  .downloads-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .downloads-toolbar select,
+  .downloads-toolbar button {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .downloads-table-wrap {
+    display: none;
+  }
+
+  .downloads-cards {
+    display: block;
+  }
+
+  .downloads-table {
+    font-size: 0.9rem;
+  }
+
+  .downloads-table th,
+  .downloads-table td {
+    padding: 0.5rem 0.4rem;
+  }
+
+  .downloads-table td button {
+    margin-bottom: 0.25rem;
+    min-height: 40px;
+  }
+
+  .name-cell {
+    max-width: 140px;
+  }
+}

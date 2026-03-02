@@ -1,0 +1,53 @@
+# Conteúdo de volumes — não incluir no contexto de build
+torrents/
+downloads/
+
+# Segredos e ambiente local
+.env
+.env.local
+.env.*.local
+*.env
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Python (build usa só pyproject.toml + src/)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+venv/
+.venv/
+env/
+
+# Frontend: node_modules e dist local (build é feito dentro da imagem)
+frontend/node_modules/
+frontend/dist/
+node_modules/
+
+# Documentação e testes (reduzir tamanho da imagem)
+docs/
+tests/
+*.md
+!README.md
+
+# IDE e ferramentas
+.idea/
+.vscode/
+.cursor/
+
+# Outros
+*.log
+.DS_Store
+Thumbs.db
+*.db
+*.db-journal
+*.db-wal
+*.db-shm

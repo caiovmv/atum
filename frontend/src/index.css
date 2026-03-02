@@ -1,0 +1,86 @@
+/* Atum: tema escuro, sidebar tipo Spotify, área principal tipo Netflix */
+:root {
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: #e5e5e5;
+  background-color: #0a0a0a;
+  color-scheme: dark;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  --atum-bg: #0a0a0a;
+  --atum-sidebar: #121212;
+  --atum-card: #181818;
+  --atum-card-hover: #282828;
+  --atum-accent: #1db954;
+  --atum-accent-hover: #1ed760;
+  --atum-text: #e5e5e5;
+  --atum-text-muted: #a0a0a0;
+  --atum-border: #2a2a2a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: var(--atum-bg);
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+}
+
+a {
+  color: var(--atum-accent);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--atum-accent-hover);
+  text-decoration: underline;
+}
+
+button {
+  border-radius: 6px;
+  border: none;
+  padding: 0.5em 1em;
+  min-height: 44px;
+  font-size: 0.95em;
+  font-weight: 500;
+  font-family: inherit;
+  background: var(--atum-card);
+  color: var(--atum-text);
+  cursor: pointer;
+  transition: background 0.2s;
+  -webkit-tap-highlight-color: transparent;
+}
+button:hover {
+  background: var(--atum-card-hover);
+}
+button.primary {
+  background: var(--atum-accent);
+  color: #000;
+}
+button.primary:hover {
+  background: var(--atum-accent-hover);
+}
+
+input, select {
+  background: var(--atum-card);
+  border: 1px solid var(--atum-border);
+  border-radius: 6px;
+  color: var(--atum-text);
+  padding: 0.5em 0.75em;
+  font-size: 1em;
+  min-height: 44px;
+}
+input::placeholder {
+  color: var(--atum-text-muted);
+}

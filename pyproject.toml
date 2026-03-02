@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dl-torrent"
+version = "0.2.0"
+description = "Buscar e baixar torrents de música (FLAC, ALAC, MP3) via CLI."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "1337x>=2.0",
+    "tpblite>=0.8.0",
+    "feedparser>=6.0.0",
+    "transmission-rpc>=4.0.0",
+    "requests>=2.28.0",
+    "pydantic-settings>=2.0.0",
+    "typer>=0.9.0",
+    "questionary>=2.0.0",
+    "torrentp>=0.2.0",
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.22.0",
+    "psycopg2-binary>=2.9.0",
+    "redis>=5.0.0",
+]
+
+[project.scripts]
+dl-torrent = "app.main:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-v --tb=short"
+filterwarnings = ["ignore::DeprecationWarning"]
