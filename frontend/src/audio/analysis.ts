@@ -1,0 +1,165 @@
+/**
+ * Funções de análise de áudio para o receiver: RMS (VU), pico dBFS,
+ * FFT, buffer do stream e heurística de qualidade.
+ *
+ * VU: escala -40 a +3 VU, relação 0 VU ≈ -18 dBFS (NAB).
+ * Power/Peak: escala -60 a 0 dBFS (padrão digital).
+ */
+
+/** Escala VU (loudness médio): -20 a +3. Centro visual: -3 VU. */
+export const VU_MIN = -20;
+export const VU_MAX = 3;
+/** Ponto central do dial VU (0.5 normalizado). */
+export const VU_CENTER = -3;
+
+/** Escala dBFS do Power Meter (pico): -60 a 0. Centro visual: -12 dBFS. */
+export const DBFS_MIN = -60;
+export const DBFS_MAX = 0;
+/** Ponto central do dial Power (0.5 normalizado). */
+export const DBFS_CENTER = -12;
+
+/** RMS → dBFS (full scale digital). Retorna valor em dB, tipicamente -Infinity a 0. */
+export function computeRMS_dBFS(analyser: AnalyserNode): number {
+  const buffer = new Float32Array(analyser.fftSize);
+  analyser.getFloatTimeDomainData(buffer);
+  let sum = 0;
+  for (let i = 0; i < buffer.length; i++) {
+    sum += buffer[i] * buffer[i];
+  }
+  const rms = Math.sqrt(sum / buffer.length);
+  const dbFS = 20 * Math.log10(rms);
+  return isFinite(dbFS) ? dbFS : DBFS_MIN;
+}
+
+/**
+ * Converte dBFS para VU (0 VU ≈ -18 dBFS).
+ * VU = dBFS + 18, limitado a [-20, +3].
+ */
+export function dBFS_to_VU(dBFS: number): number {
+  const vu = dBFS + 18;
+  return Math.max(VU_MIN, Math.min(VU_MAX, vu));
+}
+
+/**
+ * Converte VU para posição normalizada 0–1.
+ * Mapeamento não-linear (piecewise): VU_CENTER (-3) fica no centro (0.5).
+ *   -20 → 0,  -3 → 0.5,  +3 → 1
+ */
+export function vuToNormalized(vu: number): number {
+  const clamped = Math.max(VU_MIN, Math.min(VU_MAX, vu));
+  if (clamped <= VU_CENTER) {
+    return ((clamped - VU_MIN) / (VU_CENTER - VU_MIN)) * 0.5;
+  }
+  return 0.5 + ((clamped - VU_CENTER) / (VU_MAX - VU_CENTER)) * 0.5;
+}
+
+/** Pico no time domain → dBFS para Power Meter (-60 a 0). */
+export function computePeak_dBFS(analyser: AnalyserNode): number {
+  const buffer = new Float32Array(analyser.fftSize);
+  analyser.getFloatTimeDomainData(buffer);
+  let peak = 0;
+  for (let i = 0; i < buffer.length; i++) {
+    peak = Math.max(peak, Math.abs(buffer[i]));
+  }
+  const dbFS = peak > 0 ? 20 * Math.log10(peak) : DBFS_MIN;
+  return Math.max(DBFS_MIN, Math.min(DBFS_MAX, isFinite(dbFS) ? dbFS : DBFS_MIN));
+}
+
+/**
+ * Converte dBFS para posição normalizada 0–1 (Power Meter).
+ * Mapeamento não-linear (piecewise): DBFS_CENTER (-12) fica no centro (0.5).
+ *   -60 → 0,  -12 → 0.5,  0 → 1
+ */
+export function dBFS_toNormalized(dBFS: number): number {
+  const clamped = Math.max(DBFS_MIN, Math.min(DBFS_MAX, dBFS));
+  if (clamped <= DBFS_CENTER) {
+    return ((clamped - DBFS_MIN) / (DBFS_CENTER - DBFS_MIN)) * 0.5;
+  }
+  return 0.5 + ((clamped - DBFS_CENTER) / (DBFS_MAX - DBFS_CENTER)) * 0.5;
+}
+
+/** FFT para spectrum analyzer (byte frequency data). */
+export function computeFFT(analyser: AnalyserNode): Uint8Array {
+  const data = new Uint8Array(analyser.frequencyBinCount);
+  analyser.getByteFrequencyData(data);
+  return data;
+}
+
+/** Ratio de buffer preenchido (0–1) para Streaming Signal. */
+export function computeStreamingSignal(player: HTMLAudioElement): number {
+  const duration = player.duration;
+  if (!duration || !isFinite(duration)) return 1;
+  const buffered = player.buffered;
+  if (buffered.length === 0) return 0;
+  const bufferedEnd = buffered.end(buffered.length - 1);
+  return bufferedEnd / duration;
+}
+
+export interface QualityMeta {
+  codec?: string;
+  bitrate?: number;
+  sampleRate?: number;
+}
+
+/**
+ * Score de qualidade 0–1 para QualityTune.
+ * FLAC 96kHz → 1; FLAC 44kHz → 0.8; MP3 320 → 0.6; MP3 192 → 0.4; resto → 0.2.
+ */
+export function detectQuality(meta: QualityMeta | null): number {
+  if (!meta?.codec) return 0.2;
+  const codec = (meta.codec || '').toUpperCase();
+  const sr = meta.sampleRate ?? 0;
+  const br = meta.bitrate ?? 0;
+
+  if (codec === 'FLAC' && sr >= 96000) return 1;
+  if (codec === 'FLAC') return 0.8;
+  if (codec === 'MP3' && br >= 320) return 0.6;
+  if (codec === 'MP3' && br >= 192) return 0.4;
+  if (codec === 'ALAC' || codec === 'AAC') return 0.7;
+  return 0.2;
+}
+
+/**
+ * Loudness inteligente Hi-Fi: boost de graves/agudos proporcional ao volume
+ * efetivo (slider * ATT) com compensação por codec.
+ */
+export function computeLoudnessBoost(
+  volumePercent: number,
+  attOn: boolean,
+  codec: string | undefined
+): { bassBoost: number; trebleBoost: number } {
+  const effectiveVolume = (volumePercent / 100) * (attOn ? 0.1 : 1.0);
+  const volumeFactor = Math.max(0, 1 - effectiveVolume);
+
+  const maxBass = 10;
+  const maxTreble = 6;
+
+  let codecMul = 1.0;
+  const c = (codec || '').toUpperCase();
+  if (c === 'FLAC' || c === 'ALAC') codecMul = 0.8;
+  else if (c === 'MP3')             codecMul = 1.2;
+  else if (c === 'AAC')             codecMul = 1.1;
+
+  return {
+    bassBoost:   Math.round(maxBass * volumeFactor * codecMul * 10) / 10,
+    trebleBoost: Math.round(maxTreble * volumeFactor * codecMul * 10) / 10,
+  };
+}
+
+/** Inferir meta a partir de Content-Type ou nome de arquivo (heurística). */
+export function inferQualityMeta(contentType: string | null, fileName: string): QualityMeta | null {
+  const name = (fileName || '').toLowerCase();
+  const type = (contentType || '').toLowerCase();
+
+  if (type.includes('flac') || name.endsWith('.flac')) {
+    return { codec: 'FLAC', sampleRate: 44100 };
+  }
+  if (type.includes('mp3') || name.endsWith('.mp3')) {
+    return { codec: 'MP3', bitrate: 320 };
+  }
+  if (name.endsWith('.m4a') || name.endsWith('.alac')) {
+    return { codec: 'ALAC' };
+  }
+  if (type.includes('aac')) return { codec: 'AAC' };
+  return null;
+}

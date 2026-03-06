@@ -10,8 +10,8 @@ from app.quality import parse_quality
 from app.search import (
     SearchResult,
     get_magnet_for_result,
+    probe_indexer,
     search_all,
-    search_tg,
 )
 
 
@@ -30,14 +30,14 @@ class TestGetMagnetForResult:
         )
         assert get_magnet_for_result(r) == "magnet:?xt=urn:btih:abc"
 
-    def test_tg_returns_magnet(self) -> None:
+    def test_tpb_returns_magnet(self) -> None:
         r = SearchResult(
             title="Album",
             quality=parse_quality("FLAC"),
             seeders=0,
             size="",
             torrent_id="x",
-            indexer="tg",
+            indexer="tpb",
             magnet="magnet:?xt=urn:btih:xyz",
         )
         assert get_magnet_for_result(r) == "magnet:?xt=urn:btih:xyz"
@@ -113,25 +113,23 @@ class TestSearchAll:
         mock_tpb.assert_not_called()
 
 
-class TestSearchTg:
-    """Testes de search_tg com requests mockado."""
+class TestProbeIndexer:
+    """Testes de probe_indexer (health-check por busca)."""
 
-    @patch("requests.get")
-    def test_parses_html_and_returns_results(self, mock_get: object) -> None:
-        mock_get.return_value.status_code = 200
-        mock_get.return_value.raise_for_status = lambda: None
-        mock_get.return_value.text = '''
-        <div><a href="other">x</a></div>
-        <a title="Pink Floyd - The Wall FLAC 2024" href="magnet:?xt=urn:btih:abc123">DL</a>
-        '''
-        results = search_tg("Pink Floyd", limit=5, no_quality_filter=True)
-        assert len(results) >= 1
-        assert any("Pink Floyd" in r.title or "The Wall" in r.title for r in results)
-        assert results[0].indexer == "tg"
-        assert results[0].magnet == "magnet:?xt=urn:btih:abc123"
+    def test_iptorrents_returns_true_stub(self) -> None:
+        assert probe_indexer("iptorrents") is True
 
-    @patch("requests.get")
-    def test_request_error_returns_empty(self, mock_get: object) -> None:
-        mock_get.side_effect = Exception("Timeout")
-        results = search_tg("test", verbose=False)
-        assert results == []
+    def test_unknown_indexer_returns_false(self) -> None:
+        assert probe_indexer("unknown") is False
+        assert probe_indexer("tg") is False
+
+    @patch("app.search.search_1337x")
+    def test_1337x_success_returns_true(self, mock_1337x: object) -> None:
+        mock_1337x.return_value = []
+        assert probe_indexer("1337x", timeout_sec=5) is True
+        mock_1337x.assert_called_once()
+
+    @patch("app.search.search_1337x")
+    def test_1337x_exception_returns_false(self, mock_1337x: object) -> None:
+        mock_1337x.side_effect = Exception("timeout")
+        assert probe_indexer("1337x", timeout_sec=5) is False

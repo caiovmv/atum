@@ -1,0 +1,115 @@
+.search-result-card-skeleton {
+  background: var(--atum-card);
+  border-radius: 8px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.search-result-card-skeleton-cover {
+  aspect-ratio: 2 / 3;
+  width: 100%;
+  border-radius: 6px;
+  margin-bottom: 0.75rem;
+  background: linear-gradient(
+    90deg,
+    var(--atum-card-hover) 0%,
+    var(--atum-border) 50%,
+    var(--atum-card-hover) 100%
+  );
+  background-size: 200% 100%;
+  animation: search-skeleton-shimmer 1.2s ease-in-out infinite;
+}
+
+.search-result-card-skeleton-source {
+  height: 0.75rem;
+  width: 4rem;
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+  background: linear-gradient(
+    90deg,
+    var(--atum-card-hover) 0%,
+    var(--atum-border) 50%,
+    var(--atum-card-hover) 100%
+  );
+  background-size: 200% 100%;
+  animation: search-skeleton-shimmer 1.2s ease-in-out infinite;
+  animation-delay: 0.1s;
+}
+
+.search-result-card-skeleton-title {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+}
+
+.search-result-card-skeleton-title span {
+  height: 0.9rem;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    var(--atum-card-hover) 0%,
+    var(--atum-border) 50%,
+    var(--atum-card-hover) 100%
+  );
+  background-size: 200% 100%;
+  animation: search-skeleton-shimmer 1.2s ease-in-out infinite;
+  animation-delay: 0.2s;
+}
+
+.search-result-card-skeleton-title span:first-child {
+  width: 95%;
+}
+
+.search-result-card-skeleton-title span:last-child {
+  width: 70%;
+}
+
+.search-result-card-skeleton-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.search-result-card-skeleton-meta span {
+  height: 0.75rem;
+  width: 2.5rem;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    var(--atum-card-hover) 0%,
+    var(--atum-border) 50%,
+    var(--atum-card-hover) 100%
+  );
+  background-size: 200% 100%;
+  animation: search-skeleton-shimmer 1.2s ease-in-out infinite;
+  animation-delay: 0.3s;
+}
+
+.search-result-card-skeleton-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: auto;
+}
+
+.search-result-card-skeleton-actions span {
+  height: 2rem;
+  flex: 1;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    var(--atum-card-hover) 0%,
+    var(--atum-border) 50%,
+    var(--atum-card-hover) 100%
+  );
+  background-size: 200% 100%;
+  animation: search-skeleton-shimmer 1.2s ease-in-out infinite;
+  animation-delay: 0.4s;
+}
+
+@keyframes search-skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}

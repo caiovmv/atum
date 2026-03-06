@@ -1,0 +1,614 @@
+/* Vintage Receiver Panel - VFD (Vacuum Fluorescent Display) style */
+
+:root {
+  --vfd-color: #00e5c8;
+  --vfd-dim: rgba(0, 229, 200, 0.12);
+  --vfd-glow: 0 0 8px rgba(0, 229, 200, 0.4), 0 0 20px rgba(0, 229, 200, 0.15);
+}
+
+.receiver-panel {
+  --receiver-bg: #0a0a0a;
+  position: relative;
+  background: var(--receiver-bg);
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: inset 0 0 0 1px rgba(0, 229, 200, 0.06), 0 8px 32px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.receiver-panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 40%;
+  background: linear-gradient(to bottom, rgba(0, 229, 200, 0.04), transparent);
+  pointer-events: none;
+  border-radius: 12px 12px 0 0;
+}
+
+.receiver-panel::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 120%;
+  height: 120%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle at center, rgba(0, 229, 200, 0.03), transparent 70%);
+  pointer-events: none;
+}
+
+/* ─── Meters row: [L + R] ... gap áureo ... [Power] ─── */
+/* L+R ficam juntos (gap curto), Power separado por gap áureo (φ ≈ 1.618x) */
+
+.receiver-row-meters {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: clamp(2rem, 5vw, 4rem);
+  margin-bottom: 1rem;
+  position: relative;
+  z-index: 1;
+}
+
+.receiver-meters-lr {
+  display: flex;
+  align-items: flex-end;
+  gap: clamp(0.35rem, 1vw, 0.75rem);
+}
+
+/* VU meter */
+.receiver-vu {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  justify-self: center;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 8px;
+  padding: 0.5rem 0.5rem 0.35rem;
+  box-shadow: inset 0 0 12px rgba(0, 229, 200, 0.04);
+}
+
+.receiver-vu-label {
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  color: var(--vfd-color);
+  text-shadow:
+    0 0 6px rgba(0, 229, 200, 0.5),
+    0 0 14px rgba(0, 229, 200, 0.25),
+    0 0 24px rgba(0, 229, 200, 0.1);
+}
+
+.receiver-vu-svg {
+  width: 140px;
+  height: 84px;
+}
+
+.receiver-vu-scale-text {
+  font-size: 8px;
+  font-family: system-ui, sans-serif;
+}
+
+/* Power meter */
+.receiver-power {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  justify-self: center;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 8px;
+  padding: 0.5rem 0.5rem 0.35rem;
+  box-shadow: inset 0 0 12px rgba(0, 229, 200, 0.04);
+}
+
+.receiver-power-dial .receiver-power-svg {
+  width: 140px;
+  height: 84px;
+}
+
+.receiver-power-label {
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  color: var(--vfd-color);
+  text-shadow:
+    0 0 6px rgba(0, 229, 200, 0.5),
+    0 0 14px rgba(0, 229, 200, 0.25),
+    0 0 24px rgba(0, 229, 200, 0.1);
+}
+
+.receiver-power-scale-text {
+  font-size: 8px;
+  font-family: system-ui, sans-serif;
+}
+
+/* ─── Spectrum Analyzer (VFD segmented display) ─── */
+
+.receiver-spectrum {
+  margin-bottom: 1rem;
+  position: relative;
+  z-index: 1;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 8px;
+  padding: 0.75rem 0.5rem 0.5rem;
+  box-shadow: inset 0 0 12px rgba(0, 229, 200, 0.04);
+}
+
+.receiver-spectrum-label {
+  display: block;
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  color: var(--vfd-color);
+  margin-bottom: 0.5rem;
+  text-shadow:
+    0 0 6px rgba(0, 229, 200, 0.5),
+    0 0 14px rgba(0, 229, 200, 0.25),
+    0 0 24px rgba(0, 229, 200, 0.1);
+}
+
+.receiver-spectrum-display {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 6px;
+}
+
+.receiver-spectrum-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.receiver-spectrum-segments {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  height: 72px;
+}
+
+.receiver-spectrum-seg {
+  flex: 1;
+  border-radius: 1px;
+  background: var(--vfd-dim);
+  transition: background 0.08s ease-out, box-shadow 0.08s ease-out;
+}
+
+.receiver-spectrum-seg-lit {
+  background: var(--vfd-color);
+  box-shadow:
+    0 0 4px rgba(0, 229, 200, 0.6),
+    0 0 10px rgba(0, 229, 200, 0.35),
+    0 0 18px rgba(0, 229, 200, 0.15);
+}
+
+.receiver-spectrum-freq {
+  font-size: 7px;
+  color: var(--vfd-color);
+  opacity: 0.5;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ─── Info row (title + time) ─── */
+
+.receiver-row-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  position: relative;
+  z-index: 1;
+}
+
+.receiver-title {
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--vfd-color);
+  opacity: 0.9;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+  text-shadow: var(--vfd-glow);
+}
+
+.receiver-time {
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--vfd-color);
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+/* ─── Signals row (stream + quality) ─── */
+
+.receiver-row-signals {
+  display: flex;
+  gap: 1.5rem;
+  margin-bottom: 1rem;
+  position: relative;
+  z-index: 1;
+}
+
+.receiver-streaming,
+.receiver-quality {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.receiver-streaming-label,
+.receiver-quality-label {
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  color: var(--vfd-color);
+  opacity: 0.5;
+}
+
+.receiver-streaming-track,
+.receiver-quality-track {
+  height: 6px;
+  background: var(--vfd-dim);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.receiver-streaming-fill,
+.receiver-quality-fill {
+  height: 100%;
+  background: var(--vfd-color);
+  border-radius: 3px;
+  transition: width 0.15s ease;
+  box-shadow: 0 0 6px rgba(0, 229, 200, 0.3);
+}
+
+.receiver-streaming-value,
+.receiver-quality-value {
+  font-size: 0.75rem;
+  color: var(--vfd-color);
+  opacity: 0.5;
+}
+
+/* ─── Waveform ─── */
+
+.receiver-waveform-wrap {
+  position: relative;
+  z-index: 1;
+  height: 72px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.3);
+  box-shadow: inset 0 0 8px rgba(0, 229, 200, 0.03);
+}
+
+.receiver-waveform-wrap > div {
+  width: 100%;
+  height: 100%;
+}
+
+/* ─── Parametric EQ ─── */
+
+.receiver-eq {
+  margin-bottom: 1rem;
+  position: relative;
+  z-index: 1;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 8px;
+  padding: 0.75rem 0.5rem 0.5rem;
+  box-shadow: inset 0 0 12px rgba(0, 229, 200, 0.04);
+}
+
+.receiver-eq-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.receiver-eq-label {
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  color: var(--vfd-color);
+  text-shadow:
+    0 0 6px rgba(0, 229, 200, 0.5),
+    0 0 14px rgba(0, 229, 200, 0.25),
+    0 0 24px rgba(0, 229, 200, 0.1);
+}
+
+.receiver-eq-flat-btn {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.5rem;
+}
+
+.receiver-eq-bands {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 4px;
+}
+
+.receiver-eq-band {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.receiver-eq-db {
+  font-size: 7px;
+  color: var(--vfd-color);
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+  min-height: 12px;
+  text-align: center;
+}
+
+.receiver-eq-segments {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  height: 72px;
+}
+
+.receiver-eq-seg {
+  flex: 1;
+  border-radius: 1px;
+  background: var(--vfd-dim);
+  cursor: pointer;
+  transition: background 0.08s ease-out, box-shadow 0.08s ease-out;
+}
+
+.receiver-eq-seg:hover {
+  background: rgba(0, 229, 200, 0.25);
+}
+
+.receiver-eq-seg-lit {
+  background: var(--vfd-color);
+  box-shadow:
+    0 0 4px rgba(0, 229, 200, 0.6),
+    0 0 10px rgba(0, 229, 200, 0.35),
+    0 0 18px rgba(0, 229, 200, 0.15);
+}
+
+.receiver-eq-seg-loudness {
+  background: rgba(0, 229, 200, 0.45);
+  box-shadow:
+    0 0 3px rgba(0, 229, 200, 0.3),
+    0 0 8px rgba(0, 229, 200, 0.15);
+  animation: loudness-pulse 2s ease-in-out infinite;
+}
+
+@keyframes loudness-pulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+
+.receiver-eq-seg-center {
+  border-top: 1px solid rgba(0, 229, 200, 0.3);
+}
+
+.receiver-eq-freq {
+  font-size: 7px;
+  color: var(--vfd-color);
+  opacity: 0.5;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ─── Horizontal Slider (Volume / Balance) ─── */
+
+.receiver-hslider {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.receiver-hslider-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.receiver-hslider-label {
+  font-size: 0.55rem;
+  letter-spacing: 0.1em;
+  color: var(--vfd-color);
+  text-shadow:
+    0 0 6px rgba(0, 229, 200, 0.5),
+    0 0 14px rgba(0, 229, 200, 0.25),
+    0 0 24px rgba(0, 229, 200, 0.1);
+}
+
+.receiver-hslider-value {
+  font-size: 0.6rem;
+  color: var(--vfd-color);
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+
+.receiver-hslider-input {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.receiver-hslider-input::-webkit-slider-runnable-track {
+  height: 4px;
+  background: var(--vfd-dim);
+  border-radius: 2px;
+}
+
+.receiver-hslider-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--vfd-color);
+  border: none;
+  margin-top: -3px;
+  box-shadow:
+    0 0 4px rgba(0, 229, 200, 0.6),
+    0 0 10px rgba(0, 229, 200, 0.3),
+    0 0 18px rgba(0, 229, 200, 0.12);
+}
+
+.receiver-hslider-input::-moz-range-track {
+  height: 4px;
+  background: var(--vfd-dim);
+  border-radius: 2px;
+  border: none;
+}
+
+.receiver-hslider-input::-moz-range-thumb {
+  width: 14px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--vfd-color);
+  border: none;
+  box-shadow:
+    0 0 4px rgba(0, 229, 200, 0.6),
+    0 0 10px rgba(0, 229, 200, 0.3),
+    0 0 18px rgba(0, 229, 200, 0.12);
+}
+
+.receiver-controls-cluster--sliders {
+  flex-direction: row;
+  gap: 0.75rem;
+  flex: 1;
+  min-width: 0;
+}
+
+/* ─── Receiver Toggle ─── */
+
+.receiver-toggle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid rgba(0, 229, 200, 0.15);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.receiver-toggle:hover {
+  border-color: rgba(0, 229, 200, 0.3);
+}
+
+.receiver-toggle-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(0, 229, 200, 0.15);
+  transition: background 0.2s, box-shadow 0.2s;
+}
+
+.receiver-toggle-label {
+  font-size: 0.55rem;
+  letter-spacing: 0.1em;
+  color: rgba(0, 229, 200, 0.4);
+  transition: color 0.2s, text-shadow 0.2s;
+}
+
+.receiver-toggle-on {
+  border-color: rgba(0, 229, 200, 0.35);
+  box-shadow: 0 0 10px rgba(0, 229, 200, 0.1);
+}
+
+.receiver-toggle-on .receiver-toggle-indicator {
+  background: var(--vfd-color);
+  box-shadow:
+    0 0 4px rgba(0, 229, 200, 0.6),
+    0 0 10px rgba(0, 229, 200, 0.35),
+    0 0 18px rgba(0, 229, 200, 0.15);
+}
+
+.receiver-toggle-on .receiver-toggle-label {
+  color: var(--vfd-color);
+  text-shadow:
+    0 0 6px rgba(0, 229, 200, 0.5),
+    0 0 14px rgba(0, 229, 200, 0.25);
+}
+
+/* ─── Controls row: [Volume + Balance] ... gap aureo ... [Loudness + ATT] ─── */
+
+.receiver-controls-row {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: clamp(2rem, 5vw, 4rem);
+  margin-bottom: 1rem;
+  position: relative;
+  z-index: 1;
+}
+
+.receiver-controls-cluster {
+  display: flex;
+  align-items: flex-end;
+  gap: clamp(0.35rem, 1vw, 0.75rem);
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  box-shadow: inset 0 0 12px rgba(0, 229, 200, 0.04);
+}
+
+/* ─── Buttons ─── */
+
+.receiver-play-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  position: relative;
+  z-index: 1;
+}
+
+.receiver-next-row {
+  margin-top: 1rem;
+  position: relative;
+  z-index: 1;
+}
+
+.receiver-play-btn {
+  padding: 0.4rem 1rem;
+  border-radius: 8px;
+  background: var(--vfd-color);
+  color: #000;
+  border: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: filter 0.15s;
+  box-shadow: 0 0 8px rgba(0, 229, 200, 0.3);
+}
+
+.receiver-play-btn:hover {
+  filter: brightness(1.15);
+}
+
+.receiver-audio-hidden {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}

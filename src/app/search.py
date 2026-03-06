@@ -1,4 +1,4 @@
-"""Busca em indexadores (1337x, TPB, TG, YTS, EZTV, NYAA, etc.) e envio para cliente."""
+"""Busca em indexadores (1337x, TPB, YTS, EZTV, NYAA, Limetorrents, etc.) e envio para cliente."""
 
 from __future__ import annotations
 
@@ -9,13 +9,7 @@ import typer
 
 import py1337x
 
-# Indexadores disponíveis: 1337x, tpb, tg, yts, eztv, nyaa, limetorrents, torlock, speedtorrent, fitgirl, rutracker, iptorrents
-ALL_INDEXERS = frozenset({
-    "1337x", "tpb", "tg",
-    "yts", "eztv", "nyaa", "limetorrents", "torlock", "speedtorrent", "fitgirl", "rutracker", "iptorrents",
-})
-# Por padrão busca em todos os indexadores públicos (iptorrents é privado e não implementado)
-DEFAULT_INDEXERS = ["1337x", "tpb", "tg", "yts", "eztv", "nyaa", "limetorrents", "torlock", "speedtorrent", "fitgirl", "rutracker"]
+from .indexers import ALL_INDEXERS, DEFAULT_INDEXERS
 
 from .config import get_settings
 from .destinations import resolve_destination
@@ -46,6 +40,7 @@ class SearchResult:
     torrent_id: str
     indexer: str = "1337x"
     magnet: str | None = None  # TPB retorna na busca; 1337x preenche depois via get_magnet_1337x
+    torrent_url: str | None = None  # URL do .torrent (quando o indexer fornece; preferido para "Ver arquivos")
     leechers: int = 0
 
 
@@ -61,6 +56,7 @@ def result_to_dict(result: SearchResult) -> dict:
         "torrent_id": result.torrent_id,
         "indexer": result.indexer,
         "magnet": result.magnet,
+        "torrent_url": result.torrent_url,
     }
 
 
@@ -476,100 +472,6 @@ def search_tpb(
     return out
 
 
-def _cat_tg(content_type: ContentType) -> int | None:
-    """Retorna cat ID do TorrentGalaxy para o content_type; 99=Music, 1=Movies, 2=TV."""
-    if content_type == "music":
-        return 99
-    if content_type == "movies":
-        return 1
-    if content_type == "tv":
-        return 2
-    return None
-
-
-def search_tg(
-    query: str,
-    limit: int = 50,
-    format_filter: str | None = None,
-    no_quality_filter: bool = False,
-    verbose: bool = False,
-    music_category_only: bool = True,
-    content_type: ContentType = "music",
-    settings=None,
-) -> list[SearchResult]:
-    """Busca no TorrentGalaxy via scraping; retorna SearchResult com magnet quando disponível."""
-    import re
-    import urllib.parse
-
-    import requests
-
-    use_video, allowed = _quality_filter_for_content_type(content_type, format_filter, no_quality_filter)
-    cat_id = None if not music_category_only else _cat_tg(content_type)
-
-    s = settings or get_settings()
-    base = (getattr(s, "tg_base_url", "") or "https://torrentgalaxy.to").strip().rstrip("/")
-    search_path = "/torrents.php"
-    url = f"{base}{search_path}?search={urllib.parse.quote_plus(query)}"
-    if cat_id is not None:
-        url += f"&cat={cat_id}"
-    try:
-        resp = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; rv:91.0) Gecko/20100101 Firefox/91.0"})
-        resp.raise_for_status()
-        html = resp.text
-    except Exception as e:
-        if verbose:
-            typer.echo(f"[verbose] Erro na busca TorrentGalaxy: {type(e).__name__}: {e}")
-        return []
-
-    # TG: parear magnet com título mais próximo (título em title="..." antes do magnet)
-    results: list[SearchResult] = []
-    magnet_re = re.compile(r'href="(magnet:\?xt=[^"]+)"', re.I)
-    title_in_quote = re.compile(r'title="((?:[^"\\]|\\.)*)"', re.I)
-
-    def clean(t: str) -> str:
-        t = re.sub(r"<[^>]+>", "", t)
-        t = t.replace("&nbsp;", " ").replace("&amp;", "&").replace("&#39;", "'").replace("&quot;", '"')
-        return t.strip() or ""
-
-    for m in magnet_re.finditer(html):
-        magnet = m.group(1)
-        # Título: último title="..." antes desta posição (evita capturar logo/menu)
-        before = html[: m.start()]
-        titles_before = title_in_quote.findall(before)
-        title = clean(titles_before[-1]) if titles_before else f"Torrent"
-        # Evitar títulos genéricos (tooltips do site)
-        if len(title) < 3 or title.lower() in ("torrent", "download", "magnet", "get"):
-            continue
-        if use_video:
-            quality = parse_quality_video(title)
-            if not no_quality_filter and not matches_format_video(quality, allowed):
-                continue
-        else:
-            quality = parse_quality(title)
-            if not no_quality_filter and not matches_format(quality, allowed):
-                continue
-        results.append(
-            SearchResult(
-                title=title,
-                quality=quality,
-                seeders=0,
-                size="",
-                torrent_id=magnet[:80] or "",
-                indexer="tg",
-                magnet=magnet,
-                leechers=0,
-            )
-        )
-        if len(results) >= limit:
-            break
-
-    results.sort(key=lambda r: (-r.quality.score, -r.seeders))
-    out = results[:limit]
-    if verbose:
-        typer.echo(f"[verbose] TorrentGalaxy: {len(out)} resultado(s) exibidos.")
-    return out
-
-
 def _search_scrape_generic(
     base_url: str,
     search_url: str,
@@ -666,7 +568,7 @@ def search_yts(
         return []
     use_video, allowed = _quality_filter_for_content_type(content_type, format_filter, no_quality_filter)
     s = settings or get_settings()
-    base = (getattr(s, "yts_base_url", "") or "https://yts.mx").strip().rstrip("/")
+    base = (getattr(s, "yts_base_url", "") or "https://yts.lt").strip().rstrip("/")
     import urllib.parse
 
     import requests
@@ -894,193 +796,6 @@ def search_limetorrents(
     return out
 
 
-def search_torlock(
-    query: str,
-    limit: int = 50,
-    format_filter: str | None = None,
-    no_quality_filter: bool = False,
-    verbose: bool = False,
-    music_category_only: bool = True,
-    content_type: ContentType = "music",
-    settings=None,
-) -> list[SearchResult]:
-    """Busca no Torlock."""
-    use_video, allowed = _quality_filter_for_content_type(content_type, format_filter, no_quality_filter)
-    s = settings or get_settings()
-    base = (getattr(s, "torlock_base_url", "") or "https://www.torlock.com").strip().rstrip("/")
-    import urllib.parse
-
-    url = f"{base}/all/torrents/{urllib.parse.quote_plus(query)}.html"
-    out = _search_scrape_generic(
-        base_url=base,
-        search_url=url,
-        query=query,
-        limit=limit,
-        indexer="torlock",
-        use_video=use_video,
-        allowed=allowed,
-        no_quality_filter=no_quality_filter,
-        verbose=verbose,
-    )
-    if verbose and out:
-        typer.echo(f"[verbose] Torlock: {len(out)} resultado(s).")
-    return out
-
-
-def search_speedtorrent(
-    query: str,
-    limit: int = 50,
-    format_filter: str | None = None,
-    no_quality_filter: bool = False,
-    verbose: bool = False,
-    music_category_only: bool = True,
-    content_type: ContentType = "music",
-    settings=None,
-) -> list[SearchResult]:
-    """Busca no SpeedTorrent."""
-    use_video, allowed = _quality_filter_for_content_type(content_type, format_filter, no_quality_filter)
-    s = settings or get_settings()
-    base = (getattr(s, "speedtorrent_base_url", "") or "https://www.speedtorrent.re").strip().rstrip("/")
-    import urllib.parse
-
-    url = f"{base}/search/all/{urllib.parse.quote_plus(query)}/seeds/1/"
-    out = _search_scrape_generic(
-        base_url=base,
-        search_url=url,
-        query=query,
-        limit=limit,
-        indexer="speedtorrent",
-        use_video=use_video,
-        allowed=allowed,
-        no_quality_filter=no_quality_filter,
-        verbose=verbose,
-    )
-    if verbose and out:
-        typer.echo(f"[verbose] SpeedTorrent: {len(out)} resultado(s).")
-    return out
-
-
-def search_fitgirl(
-    query: str,
-    limit: int = 50,
-    format_filter: str | None = None,
-    no_quality_filter: bool = False,
-    verbose: bool = False,
-    music_category_only: bool = True,
-    content_type: ContentType = "music",
-    settings=None,
-) -> list[SearchResult]:
-    """Busca no FitGirl Repacks (repacks de jogos). Retorna resultados como vídeo/genérico."""
-    use_video = True
-    allowed = None if no_quality_filter else (parse_format_filter_video(format_filter) if content_type in ("movies", "tv") else None)
-    s = settings or get_settings()
-    base = (getattr(s, "fitgirl_base_url", "") or "https://fitgirl-repacks.site").strip().rstrip("/")
-    import re
-    import urllib.parse
-
-    import requests
-
-    url = f"{base}/?s={urllib.parse.quote_plus(query)}"
-    try:
-        resp = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; rv:91.0) Gecko/20100101 Firefox/91.0"})
-        resp.raise_for_status()
-        html = resp.text
-    except Exception as e:
-        if verbose:
-            typer.echo(f"[verbose] Erro FitGirl: {type(e).__name__}: {e}")
-        return []
-
-    results: list[SearchResult] = []
-    for m in re.finditer(r'<a[^>]+href="(magnet:\?xt=[^"]+)"[^>]*>', html, re.I):
-        magnet = m.group(1)
-        before = html[: m.start()]
-        title_m = re.search(r'<a[^>]+href="[^"]*"[^>]*>([^<]+)</a>', before[-2000:] if len(before) > 2000 else before)
-        title = (title_m.group(1).strip() if title_m else "Repack").replace("&amp;", "&")
-        if len(title) < 3:
-            continue
-        quality = parse_quality_video(title)
-        if not no_quality_filter and not matches_format_video(quality, allowed):
-            continue
-        results.append(
-            SearchResult(
-                title=title,
-                quality=quality,
-                seeders=0,
-                size="",
-                torrent_id=magnet[:80],
-                indexer="fitgirl",
-                magnet=magnet,
-                leechers=0,
-            )
-        )
-        if len(results) >= limit:
-            break
-    results.sort(key=lambda r: (-r.quality.score, -r.seeders))
-    if verbose and results:
-        typer.echo(f"[verbose] FitGirl: {len(results[:limit])} resultado(s).")
-    return results[:limit]
-
-
-def search_rutracker(
-    query: str,
-    limit: int = 50,
-    format_filter: str | None = None,
-    no_quality_filter: bool = False,
-    verbose: bool = False,
-    music_category_only: bool = True,
-    content_type: ContentType = "music",
-    settings=None,
-) -> list[SearchResult]:
-    """Busca no RuTracker. Magnet pode exigir login em alguns tópicos."""
-    use_video, allowed = _quality_filter_for_content_type(content_type, format_filter, no_quality_filter)
-    s = settings or get_settings()
-    base = (getattr(s, "rutracker_base_url", "") or "https://rutracker.org").strip().rstrip("/")
-    import re
-    import urllib.parse
-
-    import requests
-
-    url = f"{base}/forum/tracker.php?nm={urllib.parse.quote_plus(query)}"
-    try:
-        resp = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; rv:91.0) Gecko/20100101 Firefox/91.0"})
-        resp.raise_for_status()
-        html = resp.text
-    except Exception as e:
-        if verbose:
-            typer.echo(f"[verbose] Erro RuTracker: {type(e).__name__}: {e}")
-        return []
-
-    results: list[SearchResult] = []
-    for m in re.finditer(r'href="(magnet:\?xt=[^"]+)"', html, re.I):
-        magnet = m.group(1)
-        before = html[: m.start()]
-        title_m = re.search(r'class="topictitle"[^>]*>([^<]+)<', before[-1500:] if len(before) > 1500 else before)
-        title = (title_m.group(1).strip() if title_m else "Torrent").replace("&amp;", "&")
-        if len(title) < 2:
-            continue
-        quality = parse_quality_video(title) if use_video else parse_quality(title)
-        if not no_quality_filter and (use_video and not matches_format_video(quality, allowed) or not use_video and not matches_format(quality, allowed)):
-            continue
-        results.append(
-            SearchResult(
-                title=title,
-                quality=quality,
-                seeders=0,
-                size="",
-                torrent_id=magnet[:80],
-                indexer="rutracker",
-                magnet=magnet,
-                leechers=0,
-            )
-        )
-        if len(results) >= limit:
-            break
-    results.sort(key=lambda r: (-r.quality.score, -r.seeders))
-    if verbose and results:
-        typer.echo(f"[verbose] RuTracker: {len(results[:limit])} resultado(s).")
-    return results[:limit]
-
-
 def search_iptorrents(
     query: str,
     limit: int = 50,
@@ -1097,13 +812,93 @@ def search_iptorrents(
     return []
 
 
+# Query mínima para probe de health-check (mesmo código que a API usa)
+_PROBE_QUERY = "e"
+
+
+def probe_indexer(
+    name: str,
+    settings=None,
+    timeout_sec: int = 10,
+) -> bool:
+    """
+    Verifica se o indexador responde à busca (mesmo código que search_all).
+    Retorna True se a chamada não lançar exceção; 0 resultados ainda é ok.
+    iptorrents é stub e retorna True sem chamar rede.
+    """
+    if name not in ALL_INDEXERS:
+        return False
+    if name == "iptorrents":
+        return True  # stub, sem auth não faz requisição
+    s = settings or get_settings()
+    kwargs_base = {
+        "limit": 1,
+        "no_quality_filter": True,
+        "verbose": False,
+    }
+
+    def _run() -> None:
+        if name == "1337x":
+            search_1337x(
+                _PROBE_QUERY,
+                content_type="music",
+                **kwargs_base,
+            )
+        elif name == "tpb":
+            search_tpb(
+                _PROBE_QUERY,
+                content_type="music",
+                settings=s,
+                **kwargs_base,
+            )
+        elif name == "yts":
+            search_yts(
+                _PROBE_QUERY,
+                content_type="movies",
+                settings=s,
+                **kwargs_base,
+            )
+        elif name == "eztv":
+            search_eztv(
+                _PROBE_QUERY,
+                content_type="tv",
+                settings=s,
+                **kwargs_base,
+            )
+        elif name == "nyaa":
+            search_nyaa(
+                _PROBE_QUERY,
+                content_type="music",
+                settings=s,
+                **kwargs_base,
+            )
+        elif name == "limetorrents":
+            search_limetorrents(
+                _PROBE_QUERY,
+                content_type="music",
+                settings=s,
+                **kwargs_base,
+            )
+        else:
+            raise ValueError(f"probe_indexer: indexador desconhecido {name!r}")
+
+    import concurrent.futures
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+            future = ex.submit(_run)
+            future.result(timeout=timeout_sec)
+        return True
+    except Exception:
+        return False
+
+
 def get_magnet_for_result(result: SearchResult) -> str | None:
     """Obtém o magnet para um resultado (usa result.magnet se já veio da busca, senão 1337x)."""
     if result.magnet:
         return result.magnet
     if result.indexer == "1337x":
         return get_magnet_1337x(result.torrent_id)
-    if result.indexer in ("tpb", "tg", "yts", "eztv", "nyaa", "limetorrents", "torlock", "speedtorrent", "fitgirl", "rutracker"):
+    if result.indexer in ("tpb", "yts", "eztv", "nyaa", "limetorrents"):
         return result.magnet
     return None
 
@@ -1184,19 +979,6 @@ def search_all(
         if not rtpb and not verbose:
             typer.echo("  TPB: nenhum resultado (espelho pode estar indisponível; use -V para detalhes).", err=True)
 
-    if "tg" in indexers:
-        rtg = search_tg(
-            query,
-            limit=fetch_limit * 2,
-            format_filter=format_filter,
-            no_quality_filter=no_quality_filter,
-            verbose=verbose,
-            music_category_only=music_category_only,
-            content_type=content_type,
-            settings=settings,
-        )
-        all_results.extend(rtg)
-
     if "yts" in indexers:
         all_results.extend(
             search_yts(
@@ -1239,58 +1021,6 @@ def search_all(
     if "limetorrents" in indexers:
         all_results.extend(
             search_limetorrents(
-                query,
-                limit=fetch_limit * 2,
-                format_filter=format_filter,
-                no_quality_filter=no_quality_filter,
-                verbose=verbose,
-                music_category_only=music_category_only,
-                content_type=content_type,
-                settings=settings,
-            )
-        )
-    if "torlock" in indexers:
-        all_results.extend(
-            search_torlock(
-                query,
-                limit=fetch_limit * 2,
-                format_filter=format_filter,
-                no_quality_filter=no_quality_filter,
-                verbose=verbose,
-                music_category_only=music_category_only,
-                content_type=content_type,
-                settings=settings,
-            )
-        )
-    if "speedtorrent" in indexers:
-        all_results.extend(
-            search_speedtorrent(
-                query,
-                limit=fetch_limit * 2,
-                format_filter=format_filter,
-                no_quality_filter=no_quality_filter,
-                verbose=verbose,
-                music_category_only=music_category_only,
-                content_type=content_type,
-                settings=settings,
-            )
-        )
-    if "fitgirl" in indexers:
-        all_results.extend(
-            search_fitgirl(
-                query,
-                limit=fetch_limit * 2,
-                format_filter=format_filter,
-                no_quality_filter=no_quality_filter,
-                verbose=verbose,
-                music_category_only=music_category_only,
-                content_type=content_type,
-                settings=settings,
-            )
-        )
-    if "rutracker" in indexers:
-        all_results.extend(
-            search_rutracker(
                 query,
                 limit=fetch_limit * 2,
                 format_filter=format_filter,
@@ -1475,12 +1205,6 @@ def run_search(
     sort_by: seeders (Se/Le) ou size (tamanho). page_size: itens por página (20).
     """
     full_query = f"{query} {album or ''}".strip()
-    try:
-        from .db import history_add_query
-        history_add_query(full_query)
-    except Exception:
-        pass  # não falhar a busca por falha no histórico
-
     results = search_all(
         full_query,
         limit=limit,

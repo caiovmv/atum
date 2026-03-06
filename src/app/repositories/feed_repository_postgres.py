@@ -156,3 +156,14 @@ def pending_delete(pending_id: int, database_url: str) -> bool:
             cur.execute("DELETE FROM feed_pending WHERE id = %s", (pending_id,))
             conn.commit()
             return cur.rowcount > 0
+
+
+def delete_feed_record(feed_id: int, database_url: str) -> bool:
+    """Remove um feed e seus itens em feed_pending e feed_processed. Retorna True se existia."""
+    with connection_postgres(database_url) as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM feed_pending WHERE feed_id = %s", (feed_id,))
+            cur.execute("DELETE FROM feed_processed WHERE feed_id = %s", (feed_id,))
+            cur.execute("DELETE FROM feeds WHERE id = %s", (feed_id,))
+            conn.commit()
+            return cur.rowcount > 0

@@ -56,6 +56,60 @@
 .downloads-modal p { margin: 0 0 1rem; color: var(--atum-text-muted); }
 .downloads-modal-actions { display: flex; gap: 0.75rem; }
 
+.downloads-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.downloads-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.downloads-pill {
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--atum-border);
+  background: var(--atum-card);
+  color: var(--atum-text);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.downloads-pill:hover {
+  background: var(--atum-card-hover);
+}
+
+.downloads-pill--active {
+  background: var(--atum-accent);
+  border-color: var(--atum-accent);
+  color: #000;
+}
+
+.downloads-pill--active:hover {
+  background: var(--atum-accent-hover);
+  border-color: var(--atum-accent-hover);
+}
+
+.downloads-pill:focus-visible {
+  outline: 2px solid var(--atum-accent);
+  outline-offset: 2px;
+}
+
+.downloads-pill-count {
+  font-size: 0.8rem;
+  opacity: 0.9;
+}
+
 .downloads-last-updated {
   color: var(--atum-text-muted);
   font-size: 0.85rem;
@@ -96,12 +150,6 @@
 .download-card-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 .download-card-actions button { min-height: 36px; }
 .downloads-cards .progress-bar-wrap { max-width: 100%; }
-
-.downloads-toolbar {
-  display: flex;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
-}
 
 .downloads-error {
   color: #e74c3c;

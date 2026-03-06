@@ -17,7 +17,7 @@ Busca torrents por nome (música, filme ou série). Lista resultados para você 
 
 | Opção | Descrição |
 |-------|------------|
-| `QUERY` | Termo de busca (nome da música/artista, filme ou série). Pode ser omitido se usar `--from-history N`. |
+| `QUERY` | Termo de busca (nome da música/artista, filme ou série). |
 | `--type`, `-t` | Tipo de conteúdo: `music` (padrão), `movies`, `tv`. Define categoria no indexador e filtro de qualidade (áudio vs vídeo). |
 | `--album`, `-a` | Nome do álbum (concatena à query; útil para música). |
 | `--best`, `-b` | Baixar o melhor resultado automaticamente (alias de `--auto-download-best-result`). |
@@ -34,8 +34,7 @@ Busca torrents por nome (música, filme ou série). Lista resultados para você 
 | `--download-dir` | Pasta de destino do download direto (com `--download-direct`). |
 | `--listen-port` | Porta para download direto (use se houver conflito com outro processo). |
 | `--background` | Com `--download-direct`: enfileirar na fila e baixar em background (use `download list` para acompanhar). |
-| `--indexer` | Indexadores separados por vírgula: `1337x`, `tpb`, `tg` (padrão: `1337x,tpb`). |
-| `--from-history` | Repetir a busca do histórico com o id indicado (veja `history list`). |
+| `--indexer` | Indexadores separados por vírgula: `1337x`, `tpb`, `yts`, `eztv`, `nyaa`, `limetorrents` (padrão: todos). |
 | `--organize` | Com download direto: criar subpastas conforme o tipo (Artist/Album, Movie (Year), Show/Season). |
 
 **Exemplos:**
@@ -70,24 +69,7 @@ dl-torrent search "Show Name S01" --type tv -f 720p,1080p
 
 # Usar só TPB
 dl-torrent search "Artist Album" --indexer tpb
-
-# Repetir busca do histórico (id 5)
-dl-torrent search --from-history 5
 ```
-
----
-
-## history list
-
-Lista as últimas buscas (cada `search` é salvo automaticamente).
-
-| Opção | Descrição |
-|-------|------------|
-| `--limit`, `-n` | Máximo de entradas (padrão: 50). |
-
-**Exemplo:** `dl-torrent history list --limit 20`
-
-Para repetir uma busca: `dl-torrent search --from-history <id>`.
 
 ---
 
@@ -296,6 +278,24 @@ Inicia a **API Web** (busca + proxy para o Runner) e serve a console **Atum** (f
 | `--host`, `-h` | Host (padrão: 0.0.0.0). |
 
 **Exemplo:** Com o Runner rodando, `set DOWNLOAD_RUNNER_URL=http://127.0.0.1:9092` e `dl-torrent serve`; abra http://localhost:8000.
+
+---
+
+## indexers daemon
+
+Fica em loop testando cada indexador com um **probe de busca** (o mesmo código que a API usa para buscar). Se um indexador falhar, é marcado como indisponível no Redis e desativado na busca (e na interface web) até voltar a responder. Útil quando a API Web está no ar e você quer que fontes instáveis sejam desativadas automaticamente.
+
+**Uso:** `dl-torrent indexers daemon [OPÇÕES]`
+
+| Opção | Descrição |
+|-------|------------|
+| `--interval`, `-i` | Intervalo em segundos entre cada ciclo (padrão: 300). |
+| `--timeout`, `-t` | Timeout em segundos por probe de busca, por indexador (padrão: 10). |
+| `--verbose`, `-v` | Mostrar resultado (ok/fail) de cada indexador a cada ciclo. |
+
+Requer `REDIS_URL` no `.env` para gravar o status; sem Redis, o daemon roda mas o status não é persistido. A API Web lê esse status em `GET /api/indexers/status` e a interface só oferece para busca as fontes com status ok.
+
+**Exemplo:** `dl-torrent indexers daemon --interval 300 --timeout 10`
 
 ---
 

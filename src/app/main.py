@@ -40,9 +40,8 @@ def main(
 
 @app.command()
 def search(
-    query: str | None = typer.Argument(None, help="Nome da música ou artista. Use --from-history N para repetir uma busca anterior."),
+    query: str | None = typer.Argument(None, help="Nome da música, filme ou série (ou artista para música)."),
     album: str | None = typer.Option(None, "--album", "-a", help="Nome do álbum."),
-    from_history: int | None = typer.Option(None, "--from-history", help="Usar a busca do histórico com este id (veja 'history list')."),
     best: bool = typer.Option(False, "--best", "-b", help="Baixar o melhor resultado automaticamente (alias de --auto-download-best-result)."),
     auto_download_best_result: bool = typer.Option(
         False,
@@ -108,7 +107,7 @@ def search(
     indexer: str = typer.Option(
         None,
         "--indexer",
-        help="Indexadores separados por vírgula (padrão: todos). Ex: 1337x,tpb,tg,yts,eztv,nyaa,limetorrents,torlock,speedtorrent,fitgirl,rutracker.",
+        help="Indexadores separados por vírgula (padrão: todos). Ex: 1337x,tpb,yts,eztv,nyaa,limetorrents.",
     ),
     organize: bool = typer.Option(
         False,
@@ -124,44 +123,34 @@ def search(
 ) -> None:
     """Buscar torrents por nome (música, filme ou série). Lista paginada: n=próxima, p=anterior."""
     from .config import get_settings
-    from .db import history_get_by_id
     from .organize import ContentType
     from .search import run_search
 
     ct: ContentType = content_type if content_type in ("music", "movies", "tv") else "music"
 
-    if from_history is not None:
-        entry = history_get_by_id(from_history)
-        if not entry:
-            typer.echo(f"Nenhuma busca encontrada no histórico com id {from_history}. Use 'dl-torrent history list'.")
-            raise typer.Exit(1)
-        query = entry["query"]
-        album = None
-        typer.echo(f"Repetindo busca: {query}")
-    else:
-        query = (query or "").strip()
-        api_key = (get_settings().lastfm_api_key or "").strip()
-        if api_key and album:
-            from .lastfm import resolve_album, resolve_artist_album
-            if query and album:
-                resolved = resolve_artist_album(query, album, api_key)
-                if resolved:
-                    query = resolved
-                    album = None
+    query = (query or "").strip()
+    api_key = (get_settings().lastfm_api_key or "").strip()
+    if api_key and album:
+        from .lastfm import resolve_album, resolve_artist_album
+        if query and album:
+            resolved = resolve_artist_album(query, album, api_key)
+            if resolved:
+                query = resolved
+                album = None
+        else:
+            results = resolve_album(album, api_key, limit=1)
+            if results:
+                query = f"{results[0]['artist']} - {results[0]['name']}"
+                typer.echo(f"Last.fm: buscando como '{query}'")
+                album = None
             else:
-                results = resolve_album(album, api_key, limit=1)
-                if results:
-                    query = f"{results[0]['artist']} - {results[0]['name']}"
-                    typer.echo(f"Last.fm: buscando como '{query}'")
-                    album = None
-                else:
-                    query = album
-                    album = None
-        elif album and not query:
-            query = album
-            album = None
+                query = album
+                album = None
+    elif album and not query:
+        query = album
+        album = None
     if not query or not str(query).strip():
-        typer.echo("Informe o termo de busca ou use --from-history N.")
+        typer.echo("Informe o termo de busca.")
         raise typer.Exit(1)
     query = str(query).strip()
 
@@ -409,31 +398,6 @@ def download_delete_cmd(
         raise typer.Exit(1)
 
 
-history_app = typer.Typer(help="Histórico de buscas (listar, repetir com --from-history).")
-app.add_typer(history_app, name="history")
-
-
-@history_app.command("list")
-def history_list_cmd(
-    limit: int = typer.Option(50, "--limit", "-n", help="Máximo de entradas exibidas."),
-) -> None:
-    """Listar últimas buscas. Use o id com: dl-torrent search --from-history <id>."""
-    from .db import history_list_recent
-
-    entries = history_list_recent(limit=limit)
-    if not entries:
-        typer.echo("Nenhuma busca no histórico.")
-        return
-    typer.echo("ID  | Data/hora           | Busca")
-    typer.echo("----+---------------------+----------------------------------------")
-    for e in entries:
-        created = (e.get("created_at") or "")[:19].replace("T", " ")
-        q = (e.get("query") or "")[:45]
-        if len(e.get("query") or "") > 45:
-            q += "…"
-        typer.echo(f"{e['id']:<3} | {created:<19} | {q}")
-
-
 resolve_app = typer.Typer(help="Resolver artista/álbum via Last.fm (sugestões de query para busca).")
 app.add_typer(resolve_app, name="resolve")
 
@@ -472,7 +436,7 @@ def lastfm_charts_cmd(
     download_direct: bool = typer.Option(False, "--download-direct", help="Baixar diretamente com libtorrent (com --batch)."),
     download_dir: str | None = typer.Option(None, "--download-dir", help="Pasta de destino (com --batch e --download-direct)."),
     background: bool = typer.Option(False, "--background", help="Enfileirar em background (com --batch e --download-direct)."),
-    indexer: str = typer.Option("1337x,tpb", "--indexer", help="Indexadores (1337x, tpb, tg, yts, eztv, nyaa, etc.) para --batch."),
+    indexer: str = typer.Option("1337x,tpb", "--indexer", help="Indexadores (1337x, tpb, yts, eztv, nyaa, limetorrents, etc.) para --batch."),
     batch_limit: int = typer.Option(5, "--batch-limit", help="Máximo de resultados por busca quando --batch (usa o melhor)."),
     organize: bool = typer.Option(False, "--organize", help="Subpastas Artist/Album (com --batch e --download-direct)."),
 ) -> None:
@@ -644,7 +608,7 @@ def spotify_playlist_cmd(
     download_direct: bool = typer.Option(False, "--download-direct", help="Baixar diretamente (com --batch)."),
     download_dir: str | None = typer.Option(None, "--download-dir", help="Pasta de destino (com --batch)."),
     background: bool = typer.Option(False, "--background", help="Enfileirar em background (com --batch)."),
-    indexer: str = typer.Option("1337x,tpb", "--indexer", help="Indexadores (1337x, tpb, tg, yts, eztv, nyaa, etc.) para --batch."),
+    indexer: str = typer.Option("1337x,tpb", "--indexer", help="Indexadores (1337x, tpb, yts, eztv, nyaa, limetorrents, etc.) para --batch."),
     batch_limit: int = typer.Option(5, "--batch-limit", help="Máximo de resultados por busca quando --batch."),
     organize: bool = typer.Option(False, "--organize", help="Subpastas Artist/Album (com --batch)."),
 ) -> None:
@@ -775,7 +739,7 @@ def wishlist_search_cmd(
             query=(t.get("term") or "").strip(),
             album=None,
             limit=limit,
-            indexers=["1337x", "tpb", "tg", "yts", "eztv", "nyaa", "limetorrents", "torlock", "speedtorrent", "fitgirl", "rutracker"],
+            indexers=["1337x", "tpb", "yts", "eztv", "nyaa", "limetorrents"],
             content_type=ct,
         )
 
@@ -846,6 +810,12 @@ def batch(
 
 feed_app = typer.Typer(help="Gerenciar feeds RSS (música, filmes, séries): add, list, poll.")
 app.add_typer(feed_app, name="feed")
+
+sync_app = typer.Typer(help="Sincronizar biblioteca com o disco: reconcile e importar pastas existentes.")
+app.add_typer(sync_app, name="sync")
+
+indexers_app = typer.Typer(help="Status dos indexadores: daemon para health-check e notificações.")
+app.add_typer(indexers_app, name="indexers")
 
 
 @feed_app.command("add")
@@ -957,6 +927,110 @@ def feed_daemon_cmd(
                 typer.echo(f"Erro no poll: {e}")
             try:
                 time.sleep(interval * 60)
+            except KeyboardInterrupt:
+                raise
+    except KeyboardInterrupt:
+        typer.echo("\nEncerrando.")
+        raise typer.Exit(0)
+
+
+@sync_app.command("daemon")
+def sync_daemon_cmd(
+    interval: int = typer.Option(300, "--interval", "-i", help="Intervalo em segundos entre cada ciclo de sync."),
+    verbose: bool = typer.Option(True, "--verbose/--no-verbose", "-v", help="Logs verbosos (reconcile e import)."),
+) -> None:
+    """Ficar em loop executando reconcile (remove do DB itens cujo content_path não existe). Ctrl+C para sair."""
+    import logging
+    import time
+    import traceback
+
+    if verbose:
+        logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+    typer.echo(f"Sync daemon: reconcile e importação a cada {interval}s. Ctrl+C para sair.")
+    try:
+        while True:
+            try:
+                typer.echo("[sync] Ciclo iniciado.")
+                from .download_manager import reconcile_downloads_with_filesystem
+                from .sync_library_imports import run_library_import_scan
+
+                n_removed = reconcile_downloads_with_filesystem()
+                typer.echo(f"  Reconcile downloads: {n_removed} removido(s) (content_path não encontrado).")
+                added, imp_removed = run_library_import_scan()
+                typer.echo(f"  Import biblioteca: {added} adicionado(s), {imp_removed} removido(s).")
+                typer.echo("[sync] Ciclo concluído.")
+            except KeyboardInterrupt:
+                raise
+            except Exception as e:
+                typer.echo(f"Erro no sync: {e}")
+                if verbose:
+                    typer.echo(traceback.format_exc())
+            try:
+                time.sleep(interval)
+            except KeyboardInterrupt:
+                raise
+    except KeyboardInterrupt:
+        typer.echo("\nEncerrando.")
+        raise typer.Exit(0)
+
+
+@indexers_app.command("daemon")
+def indexers_daemon_cmd(
+    interval: int = typer.Option(300, "--interval", "-i", help="Intervalo em segundos entre cada ciclo de health-check."),
+    timeout: int = typer.Option(10, "--timeout", "-t", help="Timeout em segundos por probe de busca (por indexador)."),
+    verbose: bool = typer.Option(False, "--verbose/--no-verbose", "-v", help="Logs por indexador."),
+) -> None:
+    """Fica em loop testando cada indexador com probe de busca (mesmo código da API). Marca falha no Redis e notifica na UI quando um cai; reativa quando voltar."""
+    import time
+
+    from .config import get_settings
+    from .db import notification_create
+    from .indexer_status import get_indexer_base_urls, get_indexer_status, run_health_cycle
+
+    typer.echo(f"Indexers daemon: health-check (probe de busca) a cada {interval}s. Ctrl+C para sair.")
+    try:
+        while True:
+            try:
+                settings = get_settings()
+                redis_url = (settings.redis_url or "").strip()
+                if not get_indexer_base_urls(settings):
+                    typer.echo("[indexers] Nenhum indexador com BASE_URL configurado.")
+                else:
+                    previous = get_indexer_status(redis_url) if redis_url else {}
+                    current = run_health_cycle(settings, redis_url, probe_timeout_sec=timeout)
+                    for name, ok in current.items():
+                        was_ok = previous.get(name, True)
+                        if was_ok and not ok:
+                            try:
+                                notification_create(
+                                    "indexer_down",
+                                    f"Indexador {name.upper()} indisponível",
+                                    f"O indexador {name} não está respondendo à busca. Foi desativado até voltar.",
+                                    {"indexer": name},
+                                )
+                            except Exception:
+                                pass
+                            typer.echo(f"  [indexers] {name}: falha (desativado)")
+                        elif not was_ok and ok:
+                            try:
+                                notification_create(
+                                    "indexer_up",
+                                    f"Indexador {name.upper()} voltou",
+                                    f"O indexador {name} está respondendo à busca novamente e foi reativado.",
+                                    {"indexer": name},
+                                )
+                            except Exception:
+                                pass
+                            typer.echo(f"  [indexers] {name}: ok (reativado)")
+                        elif verbose:
+                            typer.echo(f"  [indexers] {name}: {'ok' if ok else 'fail'}")
+            except KeyboardInterrupt:
+                raise
+            except Exception as e:
+                typer.echo(f"Erro no indexers daemon: {e}")
+            try:
+                time.sleep(interval)
             except KeyboardInterrupt:
                 raise
     except KeyboardInterrupt:

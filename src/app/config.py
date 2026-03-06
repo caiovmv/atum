@@ -37,17 +37,19 @@ class Settings(BaseSettings):
     watch_folder: str = "./torrents"
     download_dir: str = ""
 
+    # Bibliotecas por tipo: música e vídeo (ex.: D:\Library\Music e D:\Library\Videos no host).
+    # No Docker: LIBRARY_MUSIC_PATH=/library/music, LIBRARY_VIDEOS_PATH=/library/videos.
+    library_music_path: str = ""
+    library_videos_path: str = ""
+
     # 1337x: URL base (espelho 1377x.to costuma responder quando 1337x.to falha)
     x1337_base_url: str = "https://www.1377x.to"
 
     # The Pirate Bay: domínio varia por região (tpb.party, thepiratebay.org, etc.)
     tpb_base_url: str = "https://tpb.party"
 
-    # TorrentGalaxy: domínio pode variar (torrentgalaxy.to, etc.)
-    tg_base_url: str = "https://torrentgalaxy.to"
-
     # YTS (filmes; API JSON)
-    yts_base_url: str = "https://yts.mx"
+    yts_base_url: str = "https://yts.lt"
 
     # EZTV (séries TV)
     eztv_base_url: str = "https://eztv.re"
@@ -57,18 +59,6 @@ class Settings(BaseSettings):
 
     # Limetorrents
     limetorrents_base_url: str = "https://www.limetorrents.lol"
-
-    # Torlock
-    torlock_base_url: str = "https://www.torlock.com"
-
-    # SpeedTorrent
-    speedtorrent_base_url: str = "https://www.speedtorrent.re"
-
-    # FitGirl Repacks (repacks de jogos)
-    fitgirl_base_url: str = "https://fitgirl-repacks.site"
-
-    # RuTracker (requer conta para magnet em alguns casos)
-    rutracker_base_url: str = "https://rutracker.org"
 
     # IPTorrents (tracker privado; requer cookie de sessão)
     iptorrents_base_url: str = "https://iptorrents.com"
@@ -92,6 +82,9 @@ class Settings(BaseSettings):
     # Download Runner: URL do processo que expõe a fila (ex: http://127.0.0.1:9092). Vazio = usar download_manager no processo.
     download_runner_url: str = ""
 
+    # Progresso do download: intervalo em segundos entre atualizações no DB (padrão 1.0). Valores menores deixam a UI mais fluida; o worker aplica rate-limit mínimo de 1s nas escritas.
+    download_progress_interval_seconds: float = 1.0
+
     # TMDB (The Movie Database): capas para filmes e séries na interface web (obtenha em https://www.themoviedb.org/settings/api).
     tmdb_api_key: str = ""
     tmdb_read_access_token: str = ""
@@ -99,7 +92,7 @@ class Settings(BaseSettings):
     # Pasta para cache de capas (artwork baixado). Vazio = ~/.dl-torrent/covers.
     covers_dir: str = ""
 
-    # Persistência: se definido, usa PostgreSQL em vez de SQLite (ex.: postgresql://user:pass@host:5432/dbname).
+    # Persistência: PostgreSQL (obrigatório). Ex.: postgresql://user:pass@host:5432/dbname
     database_url: str = ""
 
     # Cache: se definido, usa Redis para cache de capas/TMDB (ex.: redis://redis:6379/0).
@@ -108,6 +101,19 @@ class Settings(BaseSettings):
     @property
     def watch_folder_path(self) -> Path:
         return Path(self.watch_folder).expanduser().resolve()
+
+    def save_path_for_content_type(self, content_type: str | None) -> str:
+        """Retorna o diretório base para download conforme content_type (music -> library_music_path, movies/tv -> library_videos_path)."""
+        ct = (content_type or "").strip().lower()
+        if ct == "music" and self.library_music_path and self.library_music_path.strip():
+            return str(Path(self.library_music_path.strip()).expanduser().resolve())
+        if ct in ("movies", "tv") and self.library_videos_path and self.library_videos_path.strip():
+            return str(Path(self.library_videos_path.strip()).expanduser().resolve())
+        base = (
+            (self.download_dir or "").strip()
+            or getattr(self, "watch_folder", "") or "./downloads"
+        )
+        return str(Path(base).expanduser().resolve())
 
     @property
     def covers_path(self) -> Path:

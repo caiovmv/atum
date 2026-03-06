@@ -27,28 +27,12 @@ class TestSearchCLI:
     def test_search_without_query_exits_with_message(self) -> None:
         result = runner.invoke(app, ["search"])
         assert result.exit_code != 0
-        assert "termo de busca" in result.output or "from-history" in result.output.lower()
-
-    def test_search_with_from_history_invalid_id(self) -> None:
-        result = runner.invoke(app, ["search", "--from-history", "99999"])
-        assert result.exit_code != 0
-        assert "histórico" in result.output or "99999" in result.output
+        assert "termo de busca" in result.output.lower()
 
     def test_search_help_includes_organize(self) -> None:
         result = runner.invoke(app, ["search", "--help"])
         assert result.exit_code == 0
         assert "organize" in result.output.lower()
-
-
-class TestHistoryCLI:
-    def test_history_list_runs(self) -> None:
-        result = runner.invoke(app, ["history", "list"])
-        assert result.exit_code == 0
-        assert "Nenhuma" in result.output or "ID" in result.output or "Data" in result.output
-
-    def test_history_list_limit(self) -> None:
-        result = runner.invoke(app, ["history", "list", "--limit", "5"])
-        assert result.exit_code == 0
 
 
 class TestWishlistCLI:

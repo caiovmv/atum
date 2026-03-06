@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from .config import Settings
     from .domain.ports import DownloadRepository
+    from .repositories.library_import_repository_postgres import LibraryImportRepositoryPostgres
     from .web.cover_cache import CoverCache
 
 _overrides: dict[str, Any] = {}
@@ -36,6 +37,14 @@ def get_cover_cache() -> "CoverCache":
     if "cover_cache" in _overrides:
         return _overrides["cover_cache"]
     from .web.cover_cache import get_cover_cache as _get
+    return _get()
+
+
+def get_library_import_repo() -> "LibraryImportRepositoryPostgres | None":
+    """Retorna o repositório de library_imports (Postgres) ou None se não configurado."""
+    if "library_import_repo" in _overrides:
+        return _overrides["library_import_repo"]
+    from .repositories.library_import_repository import get_library_import_repo as _get
     return _get()
 
 

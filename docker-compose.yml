@@ -16,14 +16,18 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: ["uvicorn", "app.web.app:app", "--host", "0.0.0.0", "--port", "8000"]
+    command: [ "uvicorn", "app.web.app:app", "--host", "0.0.0.0", "--port", "8000" ]
     environment:
       - DATABASE_URL=postgresql://dluser:dlpass@postgres:5432/dltorrent
       - REDIS_URL=redis://redis:6379/0
       - DOWNLOAD_RUNNER_URL=http://runner:9092
+      - LIBRARY_MUSIC_PATH=/library/music
+      - LIBRARY_VIDEOS_PATH=/library/videos
       - TMDB_API_KEY=${TMDB_API_KEY:-}
       - COVERS_DIR=/app/covers
     volumes:
+      - E:\Library\Music:/library/music
+      - E:\Library\Videos:/library/videos
       - api_covers:/app/covers
     depends_on:
       postgres:
@@ -38,14 +42,20 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: ["uvicorn", "app.runner.app:app", "--host", "0.0.0.0", "--port", "9092"]
+    command: [ "uvicorn", "app.runner.app:app", "--host", "0.0.0.0", "--port", "9092" ]
+    ports:
+      # Portas BitTorrent (TCP + UDP) para aceitar conexões de entrada de peers e DHT
+      - "6881-6889:6881-6889/tcp"
+      - "6881-6889:6881-6889/udp"
     environment:
       - DATABASE_URL=postgresql://dluser:dlpass@postgres:5432/dltorrent
       - REDIS_URL=redis://redis:6379/0
-      - DOWNLOAD_DIR=/app/downloads
+      - LIBRARY_MUSIC_PATH=/library/music
+      - LIBRARY_VIDEOS_PATH=/library/videos
       - COVERS_DIR=/app/covers
     volumes:
-      - runner_downloads:/app/downloads
+      - E:\Library\Music:/library/music
+      - E:\Library\Videos:/library/videos
       - api_covers:/app/covers
     depends_on:
       postgres:
@@ -65,7 +75,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/schema_postgres.sql:/docker-entrypoint-initdb.d/01-schema.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dluser -d dltorrent"]
+      test: [ "CMD-SHELL", "pg_isready -U dluser -d dltorrent" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -79,6 +89,85 @@ services:
     networks:
       - dl-torrent
 
+  feed-daemon:
+    image: ghcr.io/caiovmv/atum-api:v0.2.0
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: [ "dl-torrent", "feed", "daemon", "--interval", "30" ]
+    environment:
+      - DATABASE_URL=postgresql://dluser:dlpass@postgres:5432/dltorrent
+      - DOWNLOAD_RUNNER_URL=http://runner:9092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      runner:
+        condition: service_started
+    networks:
+      - dl-torrent
+
+  sync-daemon:
+    image: ghcr.io/caiovmv/atum-api:v0.2.0
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: [ "dl-torrent", "sync", "daemon", "--interval", "300" ]
+    environment:
+      - DATABASE_URL=postgresql://dluser:dlpass@postgres:5432/dltorrent
+      - REDIS_URL=redis://redis:6379/0
+      - LIBRARY_MUSIC_PATH=/library/music
+      - LIBRARY_VIDEOS_PATH=/library/videos
+      - COVERS_DIR=/app/covers
+      - TMDB_API_KEY=${TMDB_API_KEY:-}
+      - TMDB_READ_ACCESS_TOKEN=${TMDB_READ_ACCESS_TOKEN:-}
+    volumes:
+      - E:\Library\Music:/library/music
+      - E:\Library\Videos:/library/videos
+      - api_covers:/app/covers
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - dl-torrent
+
+  indexers-daemon:
+    image: ghcr.io/caiovmv/atum-api:v0.2.0
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: [ "dl-torrent", "indexers", "daemon", "--interval", "300" ]
+    environment:
+      - DATABASE_URL=postgresql://dluser:dlpass@postgres:5432/dltorrent
+      - REDIS_URL=redis://redis:6379/0
+      - X1337_BASE_URL=${X1337_BASE_URL:-https://www.1377x.to}
+      - TPB_BASE_URL=${TPB_BASE_URL:-https://tpb.party}
+      - YTS_BASE_URL=${YTS_BASE_URL:-https://yts.lt}
+      - EZTV_BASE_URL=${EZTV_BASE_URL:-https://eztv.re}
+      - NYAA_BASE_URL=${NYAA_BASE_URL:-https://nyaa.si}
+      - LIMETORRENTS_BASE_URL=${LIMETORRENTS_BASE_URL:-https://www.limetorrents.lol}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - dl-torrent
+
+  # FlareSolverr: contorna Cloudflare/reCAPTCHA nos scripts de scraping (scripts/scraping/).
+  # No .env defina: FLARESOLVERR_URL=http://localhost:8191 (scripts no host) ou http://flaresolverr:8191 (de dentro do Docker).
+  flaresolverr:
+    image: flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    ports:
+      - "8191:8191"
+    environment:
+      - TZ=America/Sao_Paulo
+      - LOG_LEVEL=info
+    networks:
+      - dl-torrent
+
 networks:
   dl-torrent:
     driver: bridge
@@ -87,4 +176,3 @@ volumes:
   postgres_data:
   redis_data:
   api_covers:
-  runner_downloads:

@@ -10,19 +10,22 @@ interface CoverImageProps {
   alt?: string;
   /** Quando informado (ex.: lista de downloads), usa cache e preenche cache na primeira requisição */
   downloadId?: number;
+  /** ID do item importado (library_imports) para capa em disco */
+  importId?: number;
 }
 
-export function CoverImage({ contentType, title, size = 'card', alt = '', downloadId }: CoverImageProps) {
+export function CoverImage({ contentType, title, size = 'card', alt = '', downloadId, importId }: CoverImageProps) {
   const [url, setUrl] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   const apiSize = size === 'thumb' ? 'small' : 'large';
 
   useEffect(() => {
-    if (!title.trim() && downloadId == null) return;
+    if (!title.trim() && downloadId == null && importId == null) return;
     let cancelled = false;
     const params = new URLSearchParams({ content_type: contentType, title: title.trim() || '', size: apiSize });
     if (downloadId != null) params.set('download_id', String(downloadId));
+    if (importId != null) params.set('import_id', String(importId));
     fetch(`/api/cover?${params}`)
       .then((r) => (r.ok ? r.json() : { url: null }))
       .then((data) => {
@@ -33,7 +36,7 @@ export function CoverImage({ contentType, title, size = 'card', alt = '', downlo
         if (!cancelled) setLoaded(true);
       });
     return () => { cancelled = true; };
-  }, [contentType, title, downloadId, apiSize]);
+  }, [contentType, title, downloadId, importId, apiSize]);
 
   if (url) {
     return (

@@ -1,0 +1,162 @@
+.media-card {
+  background: var(--atum-card);
+  border-radius: 8px;
+  padding: 1rem;
+  transition: background 0.2s;
+  display: flex;
+  flex-direction: column;
+}
+
+.media-card:hover {
+  background: var(--atum-card-hover);
+}
+
+.media-card-clickable {
+  display: block;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.media-card-clickable:focus-visible {
+  outline: 2px solid var(--atum-accent);
+  outline-offset: 2px;
+}
+
+.media-card-cover-wrap {
+  position: relative;
+  aspect-ratio: 2/3;
+  width: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 0.75rem;
+  background: var(--atum-card-hover);
+}
+
+.media-card-cover-wrap--square {
+  aspect-ratio: 1/1;
+}
+
+.media-card-cover-hover-action {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  transform: scale(0.95);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  pointer-events: none;
+}
+
+.media-card:hover .media-card-cover-hover-action {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.media-card-cover-hover-action > * {
+  pointer-events: auto;
+}
+
+.media-card-cover-hover-action .media-card-play-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--atum-accent);
+  color: #000;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  transition: transform 0.15s, background 0.15s;
+}
+
+.media-card-cover-hover-action .media-card-play-btn:hover {
+  background: var(--atum-accent-hover);
+  transform: scale(1.05);
+}
+
+.media-card-cover-hover-action .media-card-play-btn:focus-visible {
+  outline: 2px solid var(--atum-text);
+  outline-offset: 2px;
+}
+
+.media-card-cover-wrap .cover-image,
+.media-card-cover-wrap .cover-image--card {
+  width: 100%;
+  height: 100%;
+  margin-bottom: 0;
+  aspect-ratio: unset;
+  object-fit: cover;
+}
+
+.media-card-cover-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.media-card-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.media-card-overlay-label {
+  text-transform: capitalize;
+}
+
+.media-card-overlay-percent {
+  font-size: 0.85rem;
+  opacity: 0.95;
+}
+
+.media-card-source {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--atum-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 0.35rem;
+}
+
+.media-card-title {
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.media-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--atum-text-muted);
+  margin-bottom: 0.75rem;
+}
+
+.media-card-actions {
+  margin-top: auto;
+}

@@ -1,6 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import { useDownloadsEvents } from '../contexts/DownloadsEventsContext';
+import { useToast } from '../contexts/ToastContext';
 import { CoverImage } from '../components/CoverImage';
+import { EmptyState } from '../components/EmptyState';
 import './Downloads.css';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -26,6 +29,8 @@ interface DownloadRow {
   progress?: number;
   num_seeds?: number;
   num_peers?: number;
+  /** Leechers (num_peers - num_seeds); preenchido pela API quando disponível */
+  num_leechers?: number | null;
   total_bytes?: number;
   downloaded_bytes?: number;
   download_speed_bps?: number;
@@ -33,14 +38,27 @@ interface DownloadRow {
 }
 
 export function Downloads() {
-  const [rows, setRows] = useState<DownloadRow[]>([]);
+  const { downloads: contextDownloads, lastUpdated: contextLastUpdated, refetch: contextRefetch, reconnecting } = useDownloadsEvents();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('');
-  const [toast, setToast] = useState<string | null>(null);
+  const { showToast } = useToast();
   const [removeModalId, setRemoveModalId] = useState<number | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const rows = useMemo(
+    () => (statusFilter ? contextDownloads.filter((d) => d.status === statusFilter) : contextDownloads) as DownloadRow[],
+    [contextDownloads, statusFilter]
+  );
+  const statusCounts = useMemo(
+    () => ({
+      queued: contextDownloads.filter((d) => d.status === 'queued').length,
+      downloading: contextDownloads.filter((d) => d.status === 'downloading').length,
+      paused: contextDownloads.filter((d) => d.status === 'paused').length,
+      completed: contextDownloads.filter((d) => d.status === 'completed').length,
+      failed: contextDownloads.filter((d) => d.status === 'failed').length,
+    }),
+    [contextDownloads]
+  );
+  const lastUpdated = contextLastUpdated;
 
   const fetchDownloads = useCallback(async () => {
     setLoading(true);
@@ -52,49 +70,27 @@ export function Downloads() {
         if (res.status === 503) throw new Error('Runner não configurado. Inicie: dl-torrent runner');
         throw new Error(await res.text());
       }
-      const data = await res.json();
-      setRows(data);
-      setLastUpdated(new Date());
+      contextRefetch();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar');
-      setRows([]);
     } finally {
       setLoading(false);
     }
-  }, [statusFilter]);
+  }, [statusFilter, contextRefetch]);
 
   useEffect(() => {
     fetchDownloads();
   }, [fetchDownloads]);
 
-  useEffect(() => {
-    const runWhenVisible = () => {
-      if (document.visibilityState !== 'visible') return;
-      fetchDownloads();
-    };
-    intervalRef.current = setInterval(runWhenVisible, 5000);
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') fetchDownloads();
-    };
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      document.removeEventListener('visibilitychange', onVisibility);
-    };
-  }, [fetchDownloads]);
-
-  function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(null), 4000);
-  }
+  const showToastMessage = (msg: string) => showToast(msg, 4000);
 
   async function start(id: number) {
     try {
       const res = await fetch(`/api/downloads/${id}/start`, { method: 'POST' });
       if (res.ok) fetchDownloads();
-      else showToast('Falha ao iniciar. Tente novamente.');
+      else showToastMessage('Falha ao iniciar. Tente novamente.');
     } catch {
-      showToast('Erro de rede ao iniciar.');
+      showToastMessage('Erro de rede ao iniciar.');
     }
   }
 
@@ -102,9 +98,9 @@ export function Downloads() {
     try {
       const res = await fetch(`/api/downloads/${id}/stop`, { method: 'POST' });
       if (res.ok) fetchDownloads();
-      else showToast('Falha ao parar. Tente novamente.');
+      else showToastMessage('Falha ao parar. Tente novamente.');
     } catch {
-      showToast('Erro de rede ao parar.');
+      showToastMessage('Erro de rede ao parar.');
     }
   }
 
@@ -113,9 +109,9 @@ export function Downloads() {
     try {
       const res = await fetch(`/api/downloads/${id}`, { method: 'DELETE' });
       if (res.ok) fetchDownloads();
-      else showToast('Falha ao remover. Tente novamente.');
+      else showToastMessage('Falha ao remover. Tente novamente.');
     } catch {
-      showToast('Erro de rede ao remover.');
+      showToastMessage('Erro de rede ao remover.');
     }
   }
 
@@ -151,25 +147,11 @@ export function Downloads() {
     return `${Math.min(100, pct).toFixed(1)}%`;
   }
 
-  const countByStatus = statusFilter === '' ? {
-    queued: rows.filter((r) => r.status === 'queued').length,
-    downloading: rows.filter((r) => r.status === 'downloading').length,
-    paused: rows.filter((r) => r.status === 'paused').length,
-    completed: rows.filter((r) => r.status === 'completed').length,
-    failed: rows.filter((r) => r.status === 'failed').length,
-  } : null;
-
   const lastUpdatedStr = lastUpdated ? `Atualizado há ${Math.round((Date.now() - lastUpdated.getTime()) / 1000)} s` : '';
 
   return (
     <div className="atum-page downloads-page">
       <h1 className="atum-page-title">Downloads</h1>
-      {toast && (
-        <div className="downloads-toast" role="alert" aria-live="polite">
-          {toast}
-          <button type="button" className="downloads-toast-dismiss" onClick={() => setToast(null)} aria-label="Fechar">×</button>
-        </div>
-      )}
       {removeModalId != null && (
         <div className="downloads-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="remove-modal-title">
           <div className="downloads-modal">
@@ -183,26 +165,35 @@ export function Downloads() {
         </div>
       )}
       <div className="downloads-toolbar">
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          aria-label="Filtrar por status"
-        >
-          <option value="">Todos</option>
-          <option value="queued">{statusLabel('queued')}{countByStatus != null ? ` (${countByStatus.queued})` : ''}</option>
-          <option value="downloading">{statusLabel('downloading')}{countByStatus != null ? ` (${countByStatus.downloading})` : ''}</option>
-          <option value="paused">{statusLabel('paused')}{countByStatus != null ? ` (${countByStatus.paused})` : ''}</option>
-          <option value="completed">{statusLabel('completed')}{countByStatus != null ? ` (${countByStatus.completed})` : ''}</option>
-          <option value="failed">{statusLabel('failed')}{countByStatus != null ? ` (${countByStatus.failed})` : ''}</option>
-        </select>
+        <div className="downloads-pills" role="group" aria-label="Filtrar por status">
+          {(['', 'queued', 'downloading', 'paused', 'completed', 'failed'] as const).map((status) => (
+            <button
+              key={status || 'all'}
+              type="button"
+              className={`downloads-pill ${statusFilter === status ? 'downloads-pill--active' : ''}`}
+              onClick={() => setStatusFilter(status)}
+              aria-pressed={statusFilter === status}
+            >
+              {status ? statusLabel(status) : 'Todos'}
+              {status && (
+                <span className="downloads-pill-count">{statusCounts[status]}</span>
+              )}
+            </button>
+          ))}
+        </div>
         <button type="button" onClick={() => fetchDownloads()} disabled={loading} aria-busy={loading}>Atualizar</button>
         {lastUpdatedStr && <span className="downloads-last-updated" aria-live="polite">{lastUpdatedStr}</span>}
+        {reconnecting && <span className="downloads-reconnecting" aria-live="polite">Reconectando…</span>}
       </div>
       {error && <p className="downloads-error" role="alert">{error}</p>}
       {loading && rows.length === 0 ? (
-        <p className="downloads-loading" aria-busy="true">Carregando…</p>
+        <EmptyState title="Carregando…" description="Buscando downloads." />
       ) : rows.length === 0 ? (
-        <p className="downloads-empty">Nenhum download na fila. <Link to="/">Ir à busca</Link></p>
+        <EmptyState
+          title="Nenhum download na fila"
+          description="Busque torrents e adicione à fila para começar."
+          action={<Link to="/search">Ir à busca</Link>}
+        />
       ) : (
         <>
           <div className="downloads-table-wrap">
@@ -245,7 +236,7 @@ export function Downloads() {
                         </div>
                       )}
                     </td>
-                    <td>{r.num_seeds ?? '—'} / {r.num_peers ?? '—'}</td>
+                    <td>{r.num_seeds ?? '—'} / {r.num_leechers != null ? r.num_leechers : (r.num_peers ?? '—')}</td>
                     <td>{formatBytes(r.total_bytes)}</td>
                     <td>{formatBytes(r.downloaded_bytes)}</td>
                     <td>{formatSpeed(r.download_speed_bps)}</td>
@@ -279,7 +270,7 @@ export function Downloads() {
                   <div className="download-card-name">{r.name || '—'}</div>
                   <span className={`status status-${r.status}`}>{statusLabel(r.status)}</span>
                   <div className="download-card-meta">
-                    {progressPercent(r)} · {r.num_seeds ?? '—'}/{r.num_peers ?? '—'} · {formatBytes(r.total_bytes)}
+                    {progressPercent(r)} · {r.num_seeds ?? '—'}/{r.num_leechers != null ? r.num_leechers : (r.num_peers ?? '—')} · {formatBytes(r.total_bytes)}
                   </div>
                   {r.status === 'downloading' && r.progress != null && (
                     <div className="progress-bar-wrap" role="progressbar" aria-valuenow={r.progress <= 1 ? r.progress * 100 : r.progress} aria-valuemin={0} aria-valuemax={100}>

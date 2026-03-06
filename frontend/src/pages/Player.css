@@ -1,0 +1,257 @@
+.atum-player {
+  padding: 1rem;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.atum-player-title {
+  font-size: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.atum-player-back {
+  display: inline-block;
+  margin-bottom: 1rem;
+  color: var(--atum-accent);
+  text-decoration: none;
+}
+
+.atum-player-back:hover {
+  text-decoration: underline;
+}
+
+.atum-player-media-wrap {
+  background: #000;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+}
+
+.atum-player-media-wrap video,
+.atum-player-media-wrap audio {
+  width: 100%;
+  display: block;
+}
+
+.atum-player-media-wrap audio {
+  padding: 1rem;
+}
+
+.atum-player-error {
+  color: var(--atum-error);
+  padding: 1rem;
+}
+
+.atum-player-loading {
+  padding: 2rem;
+  text-align: center;
+  color: var(--atum-muted);
+}
+
+.atum-player-files {
+  margin-bottom: 1rem;
+}
+
+.atum-player-files-label {
+  font-size: 0.9rem;
+  color: var(--atum-muted);
+  margin-bottom: 0.5rem;
+}
+
+.atum-player-file-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  border: 1px solid var(--atum-border);
+  border-radius: 12px;
+  background: var(--atum-card);
+}
+
+.atum-player-file-list li {
+  border-bottom: 1px solid var(--atum-border);
+}
+
+.atum-player-file-list li:last-child {
+  border-bottom: none;
+}
+
+.atum-player-file-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: var(--atum-text);
+  cursor: pointer;
+  font-size: 0.95rem;
+  gap: 0.5rem;
+  transition: background 0.15s;
+}
+
+.atum-player-file-btn:hover {
+  background: var(--atum-card-hover);
+}
+
+.atum-player-file-btn:focus-visible {
+  outline: 2px solid var(--atum-accent);
+  outline-offset: -2px;
+}
+
+.atum-player-file-btn-active {
+  background: rgba(29, 185, 84, 0.2);
+  color: var(--atum-accent);
+  font-weight: 500;
+}
+
+.atum-player-file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.atum-player-file-size {
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  color: var(--atum-muted);
+}
+
+.atum-player-now-playing {
+  font-size: 0.85rem;
+  color: var(--atum-muted);
+  margin-bottom: 0.5rem;
+}
+
+.atum-player-radio-queue {
+  margin-bottom: 1rem;
+  border: 1px solid var(--atum-border);
+  border-radius: 12px;
+  background: var(--atum-card);
+  overflow: hidden;
+}
+
+.atum-player-radio-queue-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--atum-border);
+}
+
+.atum-player-radio-queue-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--atum-muted);
+}
+
+.atum-player-radio-track-list-wrap {
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.atum-player-radio-track-list {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.atum-player-radio-track-list thead {
+  position: sticky;
+  top: 0;
+  background: var(--atum-card);
+  z-index: 1;
+}
+
+.atum-player-radio-track-list th {
+  text-align: left;
+  padding: 0.4rem 0.75rem;
+  font-weight: 600;
+  color: var(--atum-muted);
+  border-bottom: 1px solid var(--atum-border);
+}
+
+.atum-player-radio-track-list th:first-child {
+  width: 2.5rem;
+  text-align: right;
+}
+
+.atum-player-radio-track-list tbody tr {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.atum-player-radio-track-list tbody tr:hover {
+  background: var(--atum-card-hover);
+}
+
+.atum-player-radio-track-list tbody tr:focus-visible {
+  outline: 2px solid var(--atum-accent);
+  outline-offset: -2px;
+}
+
+.atum-player-radio-track-active {
+  background: rgba(29, 185, 84, 0.15);
+  color: var(--atum-accent);
+}
+
+.atum-player-radio-track-list td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--atum-border);
+}
+
+.atum-player-radio-track-list tr:last-child td {
+  border-bottom: none;
+}
+
+.atum-player-radio-num {
+  width: 2.5rem;
+  text-align: right;
+  color: var(--atum-muted);
+  vertical-align: middle;
+}
+
+.atum-player-radio-track-title {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.atum-player-radio-track-artist {
+  font-size: 0.85rem;
+  color: var(--atum-muted);
+  font-weight: normal;
+}
+
+.atum-player-radio-track-active .atum-player-radio-track-artist {
+  color: inherit;
+  opacity: 0.9;
+}
+
+.atum-player-radio-track-album {
+  color: var(--atum-muted);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.atum-player-next-btn {
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  background: var(--atum-accent);
+  color: #000;
+  border: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.atum-player-next-btn:hover {
+  filter: brightness(1.1);
+}

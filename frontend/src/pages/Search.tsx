@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CoverImage } from '../components/CoverImage';
+import { useDownloadsEvents } from '../contexts/DownloadsEventsContext';
+import { useToast } from '../contexts/ToastContext';
+import { IoCheckmarkCircle, IoCloseCircleOutline, IoSearch, IoAdd } from 'react-icons/io5';
+import { MediaCard } from '../components/MediaCard';
+import { SearchResultCardSkeleton } from '../components/SearchResultCardSkeleton';
 import './Search.css';
 
 const SEARCH_STORAGE_KEY = 'atum-search-state';
 const PAGE_SIZE = 20;
-const SOURCES = ['1337x', 'tpb', 'tg'] as const;
-type SourceKey = (typeof SOURCES)[number];
 
 interface SearchResult {
   title: string;
@@ -18,6 +20,8 @@ interface SearchResult {
   torrent_id: string;
   indexer: string;
   magnet: string | null;
+  /** URL do arquivo .torrent (quando disponível; preferido ao magnet para "Ver arquivos") */
+  torrent_url?: string | null;
   parsed_year?: number | null;
   parsed_video_quality?: string | null;
   parsed_audio_codec?: string | null;
@@ -58,22 +62,23 @@ function saveStoredSearch(state: StoredSearch) {
   }
 }
 
+const INDEXER_LABELS: Record<string, string> = {
+  '1337x': '1337x',
+  tpb: 'TPB',
+  yts: 'YTS',
+  eztv: 'EZTV',
+  nyaa: 'NYAA',
+  limetorrents: 'Limetorrents',
+  iptorrents: 'IPTorrents',
+};
+
+/** Ordem fixa das fontes no filtro (mesma ordem que a API usa por padrão). */
+const INDEXER_ORDER = ['1337x', 'tpb', 'yts', 'eztv', 'nyaa', 'limetorrents', 'iptorrents'];
+
 function indexerLabel(indexer: string | undefined): string {
   if (!indexer) return '—';
   const s = indexer.toLowerCase();
-  if (s === '1337x') return '1337x';
-  if (s === 'tpb') return 'TPB';
-  if (s === 'tg') return 'TorrentGalaxy';
-  return indexer;
-}
-
-function indexerToKey(indexer: string | undefined): SourceKey | null {
-  if (!indexer) return null;
-  const s = indexer.toLowerCase();
-  if (s === '1337x') return '1337x';
-  if (s === 'tpb') return 'tpb';
-  if (s === 'tg') return 'tg';
-  return null;
+  return INDEXER_LABELS[s] ?? indexer;
 }
 
 function titleMatchesQuery(title: string, searchQuery: string): boolean {
@@ -81,6 +86,20 @@ function titleMatchesQuery(title: string, searchQuery: string): boolean {
   if (words.length === 0) return true;
   const t = title.toLowerCase();
   return words.every((w) => t.includes(w));
+}
+
+function downloadStatusLabel(status: string): string {
+  const s = (status || '').toLowerCase();
+  if (s === 'completed') return 'Concluído';
+  if (s === 'downloading') return 'Baixando';
+  if (s === 'queued') return 'Enfileirado';
+  if (s === 'paused') return 'Pausado';
+  if (s === 'failed') return 'Falhou';
+  return status || '—';
+}
+
+function normalizeMagnet(m: string | null | undefined): string {
+  return (m || '').trim();
 }
 
 export function Search() {
@@ -91,8 +110,8 @@ export function Search() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [adding, setAdding] = useState<number[]>([]);
-  const [sourceFilter, setSourceFilter] = useState<Set<SourceKey>>(new Set(SOURCES));
+  const [indexerStatus, setIndexerStatus] = useState<Record<string, boolean>>({});
+  const [sourceFilter, setSourceFilter] = useState<Set<string>>(new Set());
   const [nameFilter, setNameFilter] = useState('');
   const [onlyRelevant, setOnlyRelevant] = useState(true);
   const [clientSort, setClientSort] = useState<'seeders' | 'size' | 'quality'>('seeders');
@@ -101,9 +120,273 @@ export function Search() {
   const [genreFilter, setGenreFilter] = useState('');
   const [qualityFilter, setQualityFilter] = useState('');
   const [audioFilter, setAudioFilter] = useState('');
-  const [toast, setToast] = useState<string | null>(null);
+  const { showToast } = useToast();
+  const [filesModal, setFilesModal] = useState<{
+    result: SearchResult | null;
+    loading: boolean;
+    error: string | null;
+    data: { name: string; files: { index: number; path: string; size: number }[] } | null;
+  }>({ result: null, loading: false, error: null, data: null });
+  const [addModal, setAddModal] = useState<{
+    result: SearchResult | null;
+    loading: boolean;
+    error: string | null;
+    data: { name: string; files: { index: number; path: string; size: number }[] } | null;
+    included: Set<number>;
+    submitting: boolean;
+  }>({ result: null, loading: false, error: null, data: null, included: new Set(), submitting: false });
+  const { downloads: contextDownloads } = useDownloadsEvents();
+  const downloads = useMemo(
+    () =>
+      contextDownloads.map((d) => ({
+        id: d.id,
+        magnet: d.magnet,
+        status: (d.status ?? 'queued') as string,
+        progress: d.progress,
+      })),
+    [contextDownloads]
+  );
+  const [indexerProgress, setIndexerProgress] = useState<Record<string, 'pending' | 'loading' | 'done' | 'error'>>({});
+  const [indexerCounts, setIndexerCounts] = useState<Record<string, number>>({});
   const navigate = useNavigate();
   const searchAbortRef = useRef<AbortController | null>(null);
+
+  const enabledIndexers = useMemo(
+    () => Object.entries(indexerStatus).filter(([, ok]) => ok).map(([name]) => name),
+    [indexerStatus]
+  );
+  const allIndexersForFilter = useMemo(() => {
+    const keys = Object.keys(indexerStatus);
+    return keys.slice().sort((a, b) => {
+      const ia = INDEXER_ORDER.indexOf(a);
+      const ib = INDEXER_ORDER.indexOf(b);
+      if (ia !== -1 && ib !== -1) return ia - ib;
+      if (ia !== -1) return -1;
+      if (ib !== -1) return 1;
+      return a.localeCompare(b);
+    });
+  }, [indexerStatus]);
+
+  useEffect(() => {
+    fetch('/api/indexers/status')
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((status: Record<string, boolean>) => {
+        setIndexerStatus(status);
+        setSourceFilter((prev) => {
+          const enabled = Object.entries(status).filter(([, ok]) => ok).map(([name]) => name);
+          if (enabled.length === 0) return prev;
+          if (prev.size === 0) return new Set(enabled);
+          return new Set(enabled.filter((e) => prev.has(e)));
+        });
+      })
+      .catch(() => setIndexerStatus({}));
+  }, []);
+
+  const indexersSseRef = useRef<EventSource | null>(null);
+  const [indexersReconnecting, setIndexersReconnecting] = useState(false);
+  useEffect(() => {
+    const open = () => {
+      if (!indexersSseRef.current) {
+        const es = new EventSource('/api/indexers/events');
+        es.onmessage = (event) => {
+          setIndexersReconnecting(false);
+          try {
+            const status = JSON.parse(event.data);
+            if (status && typeof status === 'object') setIndexerStatus(status);
+          } catch {
+            // ignore
+          }
+        };
+        es.onerror = () => {
+          setIndexersReconnecting(true);
+          es.close();
+        };
+        indexersSseRef.current = es;
+      }
+    };
+    const close = () => {
+      if (indexersSseRef.current) {
+        indexersSseRef.current.close();
+        indexersSseRef.current = null;
+      }
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') open();
+      else close();
+    };
+    if (document.visibilityState === 'visible') open();
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      close();
+    };
+  }, []);
+
+  /** Resolve magnet quando não veio na busca (ex.: 1337x). Retorna o resultado com magnet preenchido se a API resolver. */
+  async function ensureMagnetOrTorrentUrl(r: SearchResult): Promise<SearchResult | null> {
+    if (r.magnet || r.torrent_url) return r;
+    if (!r.indexer || !r.torrent_id) return null;
+    try {
+      const res = await fetch('/api/search/resolve-magnet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ indexer: r.indexer, torrent_id: r.torrent_id }),
+      });
+      const data = await res.json().catch(() => null);
+      const magnet = data?.magnet ?? null;
+      if (magnet) return { ...r, magnet };
+    } catch {
+      /* ignore */
+    }
+    return null;
+  }
+
+  async function openFilesModal(r: SearchResult) {
+    const resultWithLink = await ensureMagnetOrTorrentUrl(r);
+    if (!resultWithLink || (!resultWithLink.magnet && !resultWithLink.torrent_url)) {
+      showToastMessage('Este resultado não possui magnet nem link do .torrent.');
+      return;
+    }
+    const linkR = resultWithLink;
+    setFilesModal({ result: linkR, loading: true, error: null, data: null });
+    try {
+      const res = await fetch('/api/torrent/metadata', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ magnet: linkR.magnet ?? null, torrent_url: linkR.torrent_url ?? null }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setFilesModal((m) => ({ ...m, loading: false, error: data?.detail || res.statusText || 'Erro ao obter arquivos' }));
+        return;
+      }
+      setFilesModal((m) => ({ ...m, loading: false, data: data || null }));
+    } catch (err) {
+      setFilesModal((m) => ({ ...m, loading: false, error: err instanceof Error ? err.message : 'Erro de rede' }));
+    }
+  }
+
+  function closeFilesModal() {
+    setFilesModal({ result: null, loading: false, error: null, data: null });
+  }
+
+  async function openAddModal(r: SearchResult) {
+    const resultWithLink = await ensureMagnetOrTorrentUrl(r);
+    if (!resultWithLink || (!resultWithLink.magnet && !resultWithLink.torrent_url)) {
+      showToastMessage('Este resultado não possui magnet nem link do .torrent.');
+      return;
+    }
+    const linkR = resultWithLink;
+    setAddModal({ result: linkR, loading: true, error: null, data: null, included: new Set(), submitting: false });
+    try {
+      const res = await fetch('/api/torrent/metadata', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ magnet: linkR.magnet ?? null, torrent_url: linkR.torrent_url ?? null }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        const errMsg = typeof data?.detail === 'string' ? data.detail : (data?.detail ? JSON.stringify(data.detail) : res.statusText || 'Erro ao obter arquivos');
+        setAddModal((m) => ({ ...m, loading: false, error: errMsg }));
+        return;
+      }
+      const files = (data?.files ?? []) as { index: number; path: string; size: number }[];
+      setAddModal((m) => ({
+        ...m,
+        loading: false,
+        data: data ? { name: data.name ?? linkR.title, files } : null,
+        included: new Set(files.map((f) => f.index)),
+      }));
+    } catch (err) {
+      setAddModal((m) => ({ ...m, loading: false, error: err instanceof Error ? err.message : 'Erro de rede' }));
+    }
+  }
+
+  function closeAddModal() {
+    setAddModal({ result: null, loading: false, error: null, data: null, included: new Set(), submitting: false });
+  }
+
+  async function retryAddModal() {
+    const linkR = addModal.result;
+    if (!linkR || (!linkR.magnet && !linkR.torrent_url)) return;
+    setAddModal((m) => ({ ...m, loading: true, error: null }));
+    try {
+      const res = await fetch('/api/torrent/metadata', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ magnet: linkR.magnet ?? null, torrent_url: linkR.torrent_url ?? null }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        const msg = typeof data?.detail === 'string' ? data.detail : data?.detail?.msg ?? res.statusText ?? 'Erro ao obter arquivos';
+        setAddModal((m) => ({ ...m, loading: false, error: msg }));
+        return;
+      }
+      const files = (data?.files ?? []) as { index: number; path: string; size: number }[];
+      setAddModal((m) => ({
+        ...m,
+        loading: false,
+        data: data ? { name: data.name ?? linkR.title, files } : null,
+        included: new Set(files.map((f) => f.index)),
+      }));
+    } catch (err) {
+      setAddModal((m) => ({ ...m, loading: false, error: err instanceof Error ? err.message : 'Erro de rede' }));
+    }
+  }
+
+  function toggleAddModalFile(index: number) {
+    setAddModal((m) => {
+      if (!m.data) return m;
+      const next = new Set(m.included);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return { ...m, included: next };
+    });
+  }
+
+  function setAddModalIncludeAll(include: boolean) {
+    setAddModal((m) => {
+      if (!m.data) return m;
+      return { ...m, included: include ? new Set(m.data.files.map((f) => f.index)) : new Set() };
+    });
+  }
+
+  async function confirmAddModal() {
+    const { result, data, included, submitting } = addModal;
+    const link = result?.magnet || result?.torrent_url;
+    if (!link || !data || submitting) return;
+    setAddModal((m) => ({ ...m, submitting: true }));
+    const excluded_file_indices = data.files.map((f) => f.index).filter((i) => !included.has(i));
+    try {
+      const res = await fetch('/api/downloads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          magnet: link,
+          name: result.title,
+          content_type: contentType,
+          start_now: true,
+          excluded_file_indices,
+          torrent_files: data.files,
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      closeAddModal();
+      showToastMessage('Download adicionado à fila.');
+      navigate('/downloads');
+    } catch (err) {
+      showToastMessage(err instanceof Error ? err.message : 'Erro ao adicionar');
+    } finally {
+      setAddModal((m) => ({ ...m, submitting: false }));
+    }
+  }
+
+  function formatFileSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  }
 
   const filteredResults = useMemo(() => {
     let list = results.map((r, i) => ({ r, originalIndex: i }));
@@ -112,11 +395,8 @@ export function Search() {
       list = list.filter(({ r }) => titleMatchesQuery(r.title, q));
     }
     const src = sourceFilter;
-    if (src.size < SOURCES.length) {
-      list = list.filter(({ r }) => {
-        const k = indexerToKey(r.indexer);
-        return k != null && src.has(k);
-      });
+    if (src.size > 0) {
+      list = list.filter(({ r }) => src.has(r.indexer?.toLowerCase() ?? ''));
     }
     const name = nameFilter.trim().toLowerCase();
     if (name) {
@@ -157,13 +437,13 @@ export function Search() {
   const start = (page - 1) * PAGE_SIZE;
   const pageResults = filteredResults.slice(start, start + PAGE_SIZE);
 
-  function toggleSource(key: SourceKey) {
+  function toggleSource(key: string) {
     setPage(1);
     setSourceFilter((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
-      return next.size ? next : new Set(SOURCES);
+      return next.size ? next : new Set(enabledIndexers);
     });
   }
 
@@ -193,131 +473,207 @@ export function Search() {
     searchAbortRef.current?.abort();
     searchAbortRef.current = new AbortController();
     const signal = searchAbortRef.current.signal;
+    const indexersToRequest = sourceFilter.size > 0
+      ? Array.from(sourceFilter).filter((i) => indexerStatus[i] !== false)
+      : enabledIndexers;
+    if (indexersToRequest.length === 0) return;
+
     setLoading(true);
     setError(null);
+    setResults([]);
     setYearFilter('');
     setGenreFilter('');
     setQualityFilter('');
     setAudioFilter('');
-    const params = new URLSearchParams({
+    const progressInit: Record<string, 'loading'> = {};
+    indexersToRequest.forEach((i) => { progressInit[i] = 'loading'; });
+    setIndexerProgress(progressInit);
+    setIndexerCounts({});
+
+    const baseParams = {
       q: query.trim(),
       limit: '1000',
       sort_by: sortBy,
       content_type: contentType,
       music_category_only: contentType === 'music' ? 'true' : 'false',
+    };
+
+    function mergeAndSort(prev: SearchResult[], next: SearchResult[], by: 'seeders' | 'size'): SearchResult[] {
+      const seen = new Set(prev.map((x) => `${x.indexer}-${x.torrent_id}`));
+      const combined = [...prev];
+      for (const r of next) {
+        const key = `${r.indexer}-${r.torrent_id}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          combined.push(r);
+        }
+      }
+      if (by === 'seeders') {
+        combined.sort((a, b) => (b.seeders ?? 0) - (a.seeders ?? 0));
+      } else {
+        combined.sort((a, b) => (b.size_bytes ?? 0) - (a.size_bytes ?? 0));
+      }
+      return combined;
+    }
+
+    let completed = 0;
+    const total = indexersToRequest.length;
+
+    indexersToRequest.forEach((indexer) => {
+      const params = new URLSearchParams({ ...baseParams, indexers: indexer });
+      fetch(`/api/search?${params}`, { signal })
+        .then((res) => {
+          if (!res.ok) throw new Error(res.statusText);
+          return res.json();
+        })
+        .then((data: SearchResult[]) => {
+          if (signal.aborted) return;
+          setIndexerProgress((p) => ({ ...p, [indexer]: 'done' }));
+          setIndexerCounts((c) => ({ ...c, [indexer]: Array.isArray(data) ? data.length : 0 }));
+          setResults((prev) => mergeAndSort(prev, Array.isArray(data) ? data : [], sortBy));
+          completed += 1;
+          if (completed === total) {
+            setLoading(false);
+            setPage(1);
+            setResults((final) => {
+              saveStoredSearch({ query: query.trim(), contentType, sortBy, results: final });
+              return final;
+            });
+          }
+        })
+        .catch((err) => {
+          if (err?.name === 'AbortError') return;
+          setIndexerProgress((p) => ({ ...p, [indexer]: 'error' }));
+          setIndexerCounts((c) => ({ ...c, [indexer]: 0 }));
+          completed += 1;
+          if (completed === total) {
+            setLoading(false);
+            setResults((r) => {
+              if (r.length === 0) setError('Nenhum indexador respondeu. Tente novamente.');
+              else saveStoredSearch({ query: query.trim(), contentType, sortBy, results: r });
+              return r;
+            });
+          }
+        });
     });
-    fetch(`/api/search?${params}`, { signal })
-      .then((res) => {
-        if (!res.ok) throw new Error(res.statusText);
-        return res.json();
-      })
-      .then((data) => {
-        if (signal.aborted) return;
-        setResults(data);
-        setPage(1);
-        saveStoredSearch({ query: query.trim(), contentType, sortBy, results: data });
-      })
-      .catch((err) => {
-        if (err?.name === 'AbortError') return;
-        setError(err instanceof Error ? err.message : 'Erro na busca');
-        setResults([]);
-      })
-      .finally(() => {
-        if (!signal.aborted) setLoading(false);
-      });
-  }, [query, sortBy, contentType]);
+  }, [query, sortBy, contentType, sourceFilter, enabledIndexers, indexerStatus]);
 
   useEffect(() => {
     return () => { searchAbortRef.current?.abort(); };
   }, []);
 
-  function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(null), 4000);
-  }
-
-  async function addToQueue(indices: number[]) {
-    if (results.length === 0) return;
-    setAdding(indices);
-    try {
-      const res = await fetch('/api/add-from-search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: query.trim(),
-          limit: 1000,
-          sort_by: sortBy,
-          content_type: contentType,
-          music_category_only: contentType === 'music',
-          indices,
-          start_now: true,
-        }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
-      if (data.errors?.length) {
-        showToast('Alguns falharam: ' + data.errors.join('; '));
-      }
-      if (data.added?.length) {
-        navigate('/downloads');
-      }
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Erro ao adicionar');
-    } finally {
-      setAdding([]);
-    }
-  }
+  const showToastMessage = (msg: string) => showToast(msg, 4000);
 
   return (
     <div className="atum-page search-page">
       <h1 className="atum-page-title">Busca</h1>
-      {toast && (
-        <div className="search-toast" role="alert" aria-live="polite">
-          {toast}
-          <button type="button" className="search-toast-dismiss" onClick={() => setToast(null)} aria-label="Fechar">×</button>
+      {indexersReconnecting && <span className="search-reconnecting" aria-live="polite">Reconectando indexadores…</span>}
+      <form onSubmit={handleSearch} className="search-hero" role="search" aria-label="Buscar torrents">
+        <div className="search-hero-input-wrap">
+          <IoSearch className="search-hero-icon" aria-hidden />
+          <input
+            type="text"
+            placeholder="O que você quer ouvir ou assistir?"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="search-hero-input"
+            aria-describedby={error ? 'search-error' : undefined}
+            aria-busy={loading}
+          />
         </div>
-      )}
-      <form onSubmit={handleSearch} className="search-form" role="search" aria-label="Buscar torrents">
-        <input
-          type="text"
-          placeholder="Artista, álbum, filme, série…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="search-input"
-          aria-describedby={error ? 'search-error' : undefined}
-          aria-busy={loading}
-        />
-        <select value={contentType} onChange={(e) => setContentType(e.target.value as 'music' | 'movies' | 'tv')}>
-          <option value="music">Música</option>
-          <option value="movies">Filmes</option>
-          <option value="tv">Séries</option>
-        </select>
-        <select value={sortBy} onChange={(e) => setSortBy(e.target.value as 'seeders' | 'size')}>
-          <option value="seeders">Seeders</option>
-          <option value="size">Tamanho</option>
-        </select>
-        <button type="submit" className="primary" disabled={loading} aria-busy={loading}>
+        <div className="search-hero-pills">
+          <span className="search-hero-pills-label">Tipo:</span>
+          {(['music', 'movies', 'tv'] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              className={`search-pill ${contentType === t ? 'search-pill--active' : ''}`}
+              onClick={() => setContentType(t)}
+              aria-pressed={contentType === t}
+            >
+              {t === 'music' ? 'Música' : t === 'movies' ? 'Filmes' : 'Séries'}
+            </button>
+          ))}
+          <span className="search-hero-pills-label">Ordenar:</span>
+          <button
+            type="button"
+            className={`search-pill ${sortBy === 'seeders' ? 'search-pill--active' : ''}`}
+            onClick={() => setSortBy('seeders')}
+            aria-pressed={sortBy === 'seeders'}
+          >
+            Seeders
+          </button>
+          <button
+            type="button"
+            className={`search-pill ${sortBy === 'size' ? 'search-pill--active' : ''}`}
+            onClick={() => setSortBy('size')}
+            aria-pressed={sortBy === 'size'}
+          >
+            Tamanho
+          </button>
+        </div>
+        <button type="submit" className="search-hero-submit primary" disabled={loading} aria-busy={loading}>
           {loading ? 'Buscando…' : 'Buscar'}
         </button>
       </form>
       {error && <p id="search-error" className="search-error" role="alert">{error}</p>}
+      {Object.keys(indexerProgress).length > 0 && (
+        <div className="search-progress-wrap search-progress-wrap--compact" role="status" aria-live="polite" aria-label="Progresso da busca por indexador">
+          <div className="search-progress-bar-wrap">
+            <div
+              className="search-progress-bar-fill"
+              style={{
+                width: `${(Object.values(indexerProgress).filter((s) => s === 'done' || s === 'error').length / Object.keys(indexerProgress).length) * 100}%`,
+              }}
+            />
+            <span className="search-progress-bar-label">
+              {Object.values(indexerProgress).filter((s) => s === 'done' || s === 'error').length} / {Object.keys(indexerProgress).length}
+            </span>
+          </div>
+          <div className="search-progress-indexers">
+            {INDEXER_ORDER.filter((key) => key in indexerProgress).map((key) => {
+              const status = indexerProgress[key];
+              const count = indexerCounts[key] ?? 0;
+              return (
+                <span key={key} className={`search-progress-indexer search-progress-indexer--${status}`} title={status === 'loading' ? 'Buscando…' : status === 'done' ? `${count} resultado(s)` : 'Falha'}>
+                  {status === 'loading' && <span className="search-progress-spinner" aria-hidden />}
+                  {status === 'done' && <IoCheckmarkCircle className="search-progress-icon" aria-hidden />}
+                  {status === 'error' && <IoCloseCircleOutline className="search-progress-icon search-progress-icon--error" aria-hidden />}
+                  <span className="search-progress-indexer-name">{indexerLabel(key)}</span>
+                  {status === 'done' && count >= 0 && <span className="search-progress-count">{count}</span>}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      )}
       <section className="results-section" aria-live="polite" aria-busy={loading}>
         {results.length > 0 && (
           <>
             <div className="results-filters">
-              <div className="filter-row">
-                <span className="filter-label">Fonte:</span>
-                {SOURCES.map((key) => (
-                  <label key={key} className="filter-check">
-                    <input
-                      type="checkbox"
-                      checked={sourceFilter.has(key)}
-                      onChange={() => toggleSource(key)}
-                    />
-                    {indexerLabel(key)}
-                  </label>
-                ))}
-              </div>
+              {allIndexersForFilter.length > 0 && (
+                <div className="filter-row filter-row--chips">
+                  <span className="filter-label">Fonte:</span>
+                  <div className="filter-chips">
+                    {allIndexersForFilter.map((key) => {
+                      const enabled = indexerStatus[key] !== false;
+                      const active = sourceFilter.has(key);
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          className={`search-pill search-pill--chip ${active ? 'search-pill--active' : ''} ${!enabled ? 'search-pill--disabled' : ''}`}
+                          onClick={() => enabled && toggleSource(key)}
+                          disabled={!enabled}
+                          title={!enabled ? 'Fonte desativada' : undefined}
+                        >
+                          {indexerLabel(key)}{!enabled ? ' (indisponível)' : ''}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               <div className="filter-row">
                 <span className="filter-label">Ano:</span>
                 <select
@@ -395,21 +751,21 @@ export function Search() {
                   Só títulos relacionados à busca
                 </label>
               </div>
-              <div className="filter-row">
+              <div className="filter-row filter-row--pills">
                 <span className="filter-label">Ordenar:</span>
-                <select value={clientSort} onChange={(e) => { setClientSort(e.target.value as typeof clientSort); setPage(1); }}>
-                  <option value="seeders">Se/Le</option>
-                  <option value="size">Tamanho</option>
-                  <option value="quality">Qualidade</option>
-                </select>
+                <div className="filter-chips">
+                  <button type="button" className={`search-pill search-pill--chip ${clientSort === 'seeders' ? 'search-pill--active' : ''}`} onClick={() => { setClientSort('seeders'); setPage(1); }} aria-pressed={clientSort === 'seeders'}>Se/Le</button>
+                  <button type="button" className={`search-pill search-pill--chip ${clientSort === 'size' ? 'search-pill--active' : ''}`} onClick={() => { setClientSort('size'); setPage(1); }} aria-pressed={clientSort === 'size'}>Tamanho</button>
+                  <button type="button" className={`search-pill search-pill--chip ${clientSort === 'quality' ? 'search-pill--active' : ''}`} onClick={() => { setClientSort('quality'); setPage(1); }} aria-pressed={clientSort === 'quality'}>Qualidade</button>
+                </div>
               </div>
             </div>
             <p className="results-meta">
               {filteredResults.length} resultado(s){filteredResults.length !== results.length && ` (de ${results.length})`}
-              <button type="button" className="clear-search-btn" onClick={() => { setYearFilter(''); setGenreFilter(''); setQualityFilter(''); setAudioFilter(''); setNameFilter(''); setSourceFilter(new Set(SOURCES)); setPage(1); }}>
+              <button type="button" className="clear-search-btn" onClick={() => { setYearFilter(''); setGenreFilter(''); setQualityFilter(''); setAudioFilter(''); setNameFilter(''); setSourceFilter(new Set(enabledIndexers)); setPage(1); }}>
                 Limpar filtros
               </button>
-              <button type="button" className="clear-search-btn" onClick={() => { setResults([]); setQuery(''); setPage(1); try { sessionStorage.removeItem(SEARCH_STORAGE_KEY); } catch { /* ignore */ } }}>
+              <button type="button" className="clear-search-btn" onClick={() => { setResults([]); setQuery(''); setPage(1); setIndexerProgress({}); setIndexerCounts({}); setError(null); try { sessionStorage.removeItem(SEARCH_STORAGE_KEY); } catch { /* ignore */ } }}>
                 Nova busca
               </button>
             </p>
@@ -419,57 +775,93 @@ export function Search() {
           <p className="search-empty" role="status">Nenhum resultado para &quot;{query.trim()}&quot; com os filtros atuais. Tente limpar filtros ou alterar a busca.</p>
         )}
         <div className="results-grid">
-          {pageResults.map(({ r, originalIndex }, idx) => (
-            <div key={`${r.indexer}-${r.torrent_id}-${start + idx}`} className="result-card">
-              {(contentType === 'movies' || contentType === 'tv') ? (
+          {loading && results.length === 0
+            ? Array.from({ length: 10 }, (_, i) => <SearchResultCardSkeleton key={`skeleton-${i}`} />)
+            : pageResults.map(({ r, originalIndex }, idx) => {
+            const match = r.magnet ? downloads.find((d) => normalizeMagnet(d.magnet) === normalizeMagnet(r.magnet)) : null;
+            const overlay = match
+              ? {
+                  type: (match.progress != null ? 'progress' : 'status') as 'progress' | 'status',
+                  label: downloadStatusLabel(match.status),
+                  percent: match.progress,
+                }
+              : undefined;
+            return (
+            <MediaCard
+              key={`${r.indexer}-${r.torrent_id}-${start + idx}`}
+              cover={{ contentType, title: r.title }}
+              coverShape={contentType === 'music' ? 'square' : 'poster'}
+              title={r.title}
+              source={indexerLabel(r.indexer)}
+              meta={[
+                r.quality_label,
+                r.parsed_year != null ? String(r.parsed_year) : '',
+                r.parsed_audio_codec ?? '',
+                r.parsed_music_quality ?? '',
+                `Se: ${r.seeders} Le: ${r.leechers}`,
+                r.size,
+              ].filter(Boolean)}
+              showSeLe={true}
+              overlay={overlay}
+              primaryAction={
                 <button
                   type="button"
-                  className="result-card-clickable"
-                  onClick={() => navigate('/detail', {
-                    state: {
-                      result: r,
-                      searchParams: {
-                        query,
-                        limit: 1000,
-                        sort_by: sortBy,
-                        content_type: contentType,
-                        music_category_only: false,
-                      },
-                      originalIndex,
-                    },
-                  })}
-                  aria-label={`Ver detalhes de ${r.title}`}
+                  className="media-card-play-btn"
+                  onClick={(e) => { e.stopPropagation(); openAddModal(r); }}
+                  aria-label={`Adicionar ${r.title} à fila`}
                 >
-                  <CoverImage contentType={contentType} title={r.title} size="card" />
-                  <span className="result-source">{indexerLabel(r.indexer)}</span>
-                  <div className="result-title">{r.title}</div>
+                  <IoAdd size={24} />
                 </button>
-              ) : (
-                <>
-                  <CoverImage contentType={contentType} title={r.title} size="card" />
-                  <span className="result-source">{indexerLabel(r.indexer)}</span>
-                  <div className="result-title">{r.title}</div>
-                </>
-              )}
-              <div className="result-meta">
-                <span>{r.quality_label}</span>
-                {r.parsed_year != null && <span>{r.parsed_year}</span>}
-                {r.parsed_audio_codec && <span>{r.parsed_audio_codec}</span>}
-                {r.parsed_music_quality && <span>{r.parsed_music_quality}</span>}
-                <span>Se: {r.seeders} Le: {r.leechers}</span>
-                <span>{r.size}</span>
-              </div>
-              <button
-                type="button"
-                className="primary add-btn"
-                disabled={adding.includes(originalIndex)}
-                onClick={() => addToQueue([originalIndex])}
-                aria-label={adding.includes(originalIndex) ? 'Adicionando à fila…' : `Adicionar ${r.title} à fila`}
-              >
-                {adding.includes(originalIndex) ? '…' : 'Adicionar'}
-              </button>
-            </div>
-          ))}
+              }
+              actions={
+                <div className="result-card-actions" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    className="secondary add-btn"
+                    onClick={() => openFilesModal(r)}
+                    aria-label="Ver lista de arquivos do torrent"
+                  >
+                    Ver arquivos
+                  </button>
+                  <button
+                    type="button"
+                    className="primary add-btn"
+                    onClick={() => openAddModal(r)}
+                    aria-label={`Adicionar ${r.title} à fila`}
+                  >
+                    Adicionar
+                  </button>
+                  {(contentType === 'movies' || contentType === 'tv') && (
+                    <button
+                      type="button"
+                      className="secondary add-btn"
+                      onClick={() =>
+                        navigate('/detail', {
+                          state: {
+                            result: r,
+                            searchParams: {
+                              query,
+                              limit: 1000,
+                              sort_by: sortBy,
+                              content_type: contentType,
+                              music_category_only: false,
+                            },
+                            originalIndex,
+                          },
+                        })
+                      }
+                      aria-label={`Ver detalhes de ${r.title}`}
+                    >
+                      Detalhes
+                    </button>
+                  )}
+                </div>
+              }
+              onClick={() => openFilesModal(r)}
+              clickAriaLabel={`Ver lista de arquivos de ${r.title} (${indexerLabel(r.indexer)})`}
+            />
+          );
+          }) }
         </div>
         {filteredResults.length > PAGE_SIZE && (
           <nav className="pagination" aria-label="Paginação dos resultados">
@@ -485,6 +877,100 @@ export function Search() {
           </nav>
         )}
       </section>
+
+      {filesModal.result && (
+        <div className="search-files-modal-backdrop" onClick={closeFilesModal} aria-hidden>
+          <div className="search-files-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-labelledby="files-modal-title" aria-modal="true">
+            <div className="search-files-modal-header">
+              <h2 id="files-modal-title">Arquivos do torrent</h2>
+              <button type="button" className="search-files-modal-close" onClick={closeFilesModal} aria-label="Fechar">×</button>
+            </div>
+            <div className="search-files-modal-body">
+              {filesModal.loading && <p className="search-files-modal-loading">Obtendo lista de arquivos…</p>}
+              {filesModal.error && <p className="search-files-modal-error" role="alert">{filesModal.error}</p>}
+              {!filesModal.loading && !filesModal.error && filesModal.data && (
+                <>
+                  <p className="search-files-modal-name">{filesModal.data.name || filesModal.result.title}</p>
+                  <ul className="search-files-list">
+                    {filesModal.data.files.map((f) => (
+                      <li key={f.index} className="search-files-item">
+                        <span className="search-files-path">{f.path}</span>
+                        <span className="search-files-size">{formatFileSize(f.size)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="search-files-modal-footer">
+                    <button
+                      type="button"
+                      className="primary add-btn"
+                      onClick={() => {
+                        if (filesModal.result) {
+                          closeFilesModal();
+                          openAddModal(filesModal.result);
+                        }
+                      }}
+                      aria-label={`Adicionar ${filesModal.result?.title ?? 'este torrent'} à fila`}
+                    >
+                      Adicionar à fila
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {addModal.result && (
+        <div className="search-files-modal-backdrop" onClick={closeAddModal} aria-hidden>
+          <div className="search-add-modal search-files-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-labelledby="add-modal-title" aria-modal="true">
+            <div className="search-files-modal-header">
+              <h2 id="add-modal-title">Adicionar à fila</h2>
+              <button type="button" className="search-files-modal-close" onClick={closeAddModal} aria-label="Fechar">×</button>
+            </div>
+            <div className="search-files-modal-body">
+              {addModal.loading && <p className="search-files-modal-loading">Obtendo lista de arquivos…</p>}
+              {addModal.error && (
+                <div className="search-files-modal-error-wrap" role="alert">
+                  <p className="search-files-modal-error">{typeof addModal.error === 'string' ? addModal.error : String(addModal.error)}</p>
+                  <button type="button" className="primary add-btn" onClick={retryAddModal}>Tentar novamente</button>
+                </div>
+              )}
+              {!addModal.loading && !addModal.error && addModal.data && (
+                <>
+                  <p className="search-files-modal-name">{addModal.data.name || addModal.result?.title}</p>
+                  <div className="search-add-modal-actions-row">
+                    <button type="button" className="secondary add-btn" onClick={() => setAddModalIncludeAll(true)}>Selecionar todos</button>
+                    <button type="button" className="secondary add-btn" onClick={() => setAddModalIncludeAll(false)}>Desmarcar todos</button>
+                  </div>
+                  <ul className="search-files-list">
+                    {addModal.data.files.map((f) => (
+                      <li key={f.index} className="search-files-item search-add-file-item">
+                        <label className="search-add-file-label">
+                          <input
+                            type="checkbox"
+                            checked={addModal.included.has(f.index)}
+                            onChange={() => toggleAddModalFile(f.index)}
+                            aria-label={`Incluir ${f.path}`}
+                          />
+                          <span className="search-files-path">{f.path}</span>
+                          <span className="search-files-size">{formatFileSize(f.size)}</span>
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="search-add-modal-footer">
+                    <button type="button" className="secondary add-btn" onClick={closeAddModal}>Cancelar</button>
+                    <button type="button" className="primary add-btn" disabled={addModal.submitting} onClick={confirmAddModal}>
+                      {addModal.submitting ? '…' : 'Adicionar à fila'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

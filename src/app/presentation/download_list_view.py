@@ -48,7 +48,10 @@ def render_downloads_table(rows: list[dict]) -> None:
     except ImportError:
         for r in rows:
             se = r.get("num_seeds")
-            le = r.get("num_peers")
+            # Le = peers - seeds (num_peers é total conectados)
+            le = r.get("num_leechers")
+            if le is None and se is not None and r.get("num_peers") is not None:
+                le = max(0, (r.get("num_peers") or 0) - (r.get("num_seeds") or 0))
             se_le = f" {se}/{le}" if se is not None and le is not None else ""
             err = f" | {r.get('error_message') or ''}" if (r.get("status") or "").lower() == "failed" else ""
             typer.echo(
@@ -79,7 +82,9 @@ def render_downloads_table(rows: list[dict]) -> None:
         prog = r.get("progress") or 0
         prog_str = f"{prog:.0f}%" if status in ("downloading", "completed") else "-"
         se = r.get("num_seeds")
-        le = r.get("num_peers")
+        le = r.get("num_leechers")
+        if le is None and se is not None and r.get("num_peers") is not None:
+            le = max(0, (r.get("num_peers") or 0) - (r.get("num_seeds") or 0))
         if se is not None and le is not None:
             se_le = f"{se}/{le}"
         else:
@@ -168,7 +173,9 @@ def render_downloads_table_watch(rows: list[dict]) -> None:
             eta_str = _format_eta(r.get("eta_seconds"))
             done_str = _format_bytes(r.get("downloaded_bytes"))
         se = r.get("num_seeds")
-        le = r.get("num_peers")
+        le = r.get("num_leechers")
+        if le is None and se is not None and r.get("num_peers") is not None:
+            le = max(0, (r.get("num_peers") or 0) - (r.get("num_seeds") or 0))
         se_le = f"{se}/{le}" if se is not None and le is not None else "-"
         speed_str = _format_speed(r.get("download_speed_bps"))
         total_str = _format_bytes(r.get("total_bytes"))

@@ -98,7 +98,7 @@ O tipo de conteúdo (`music`, `movies`, `tv`) é definido por comando: `search -
 O dl-torrent guarda estado em:
 
 - **`~/.dl-torrent/`** (pasta do usuário):
-  - `feeds.db` — feeds inscritos, itens já processados dos feeds, histórico de buscas, wishlist e fila de downloads
+  - **PostgreSQL (DATABASE_URL)** — feeds inscritos, itens processados dos feeds, wishlist, fila de downloads e notificações
   - `spotify_tokens.json` — tokens OAuth do Spotify (após `spotify login`)
 
 Nenhuma configuração é armazenada ali; apenas dados de uso (feeds, histórico, wishlist, downloads, tokens Spotify).

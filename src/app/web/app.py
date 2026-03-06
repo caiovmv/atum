@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import FileResponse
 
-from .routers import cover_router, downloads_router, search_router
+from .routers import cover_router, downloads_router, feeds_router, indexers_router, library_router, notifications_router, radio_router, search_router, wishlist_router
 
 app = FastAPI(title="dl-torrent Web API", version="0.1.0")
 api = APIRouter(prefix="/api")
@@ -22,8 +22,14 @@ app.add_middleware(
 )
 
 api.include_router(search_router)
+api.include_router(indexers_router)
 api.include_router(cover_router)
 api.include_router(downloads_router)
+api.include_router(wishlist_router)
+api.include_router(feeds_router)
+api.include_router(notifications_router)
+api.include_router(library_router)
+api.include_router(radio_router)
 app.include_router(api)
 
 # SPA Atum: servir frontend build (npm run build em frontend/)
@@ -48,6 +54,31 @@ def downloads_spa():
 
 @app.get("/detail", include_in_schema=False)
 def detail_spa():
+    return _serve_spa_index()
+
+
+@app.get("/wishlist", include_in_schema=False)
+def wishlist_spa():
+    return _serve_spa_index()
+
+
+@app.get("/feeds", include_in_schema=False)
+def feeds_spa():
+    return _serve_spa_index()
+
+
+@app.get("/library", include_in_schema=False)
+def library_spa():
+    return _serve_spa_index()
+
+
+@app.get("/radio", include_in_schema=False)
+def radio_spa():
+    return _serve_spa_index()
+
+
+@app.get("/play", include_in_schema=False)
+def play_spa():
     return _serve_spa_index()
 
 

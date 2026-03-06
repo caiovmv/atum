@@ -1,0 +1,534 @@
+.atum-radio {
+  padding: 0 0 1rem;
+}
+
+/* ——— Playlist layout (Hero + Controls + Content) ——— */
+.atum-radio-playlist-layout {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.atum-radio-hero {
+  display: flex;
+  align-items: flex-end;
+  gap: 1.5rem;
+  padding: 1.5rem 0 1rem;
+  min-height: 220px;
+  background: linear-gradient(180deg, var(--atum-card) 0%, transparent 100%);
+  border-radius: 12px;
+  margin-bottom: 0.5rem;
+  padding: 1.5rem 1rem 1.25rem;
+}
+
+.atum-radio-hero-cover-wrap {
+  flex-shrink: 0;
+}
+
+.atum-radio-hero-cover {
+  width: 192px;
+  height: 192px;
+  object-fit: cover;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.atum-radio-hero-cover-placeholder {
+  width: 192px;
+  height: 192px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--atum-card) 0%, var(--atum-border) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 3rem;
+  font-weight: 700;
+  color: var(--atum-muted);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.atum-radio-hero-text {
+  flex: 1;
+  min-width: 0;
+  padding-bottom: 0.25rem;
+}
+
+.atum-radio-hero-badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--atum-fg);
+  margin-bottom: 0.35rem;
+}
+
+.atum-radio-hero-title {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0 0 0.25rem;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.atum-radio-hero-meta {
+  font-size: 0.9rem;
+  color: var(--atum-muted);
+  margin: 0;
+}
+
+/* Controls */
+.atum-radio-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0 1.25rem;
+}
+
+.atum-radio-hero-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1.25rem;
+  border-radius: 999px;
+  border: none;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.1s, filter 0.15s;
+}
+
+.atum-radio-hero-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.atum-radio-hero-btn:not(:disabled):hover {
+  transform: scale(1.02);
+}
+
+.atum-radio-hero-btn:not(:disabled):active {
+  transform: scale(0.98);
+}
+
+.atum-radio-hero-btn-primary {
+  background: var(--atum-accent);
+  color: #000;
+  padding: 0.6rem 1.5rem;
+}
+
+.atum-radio-hero-btn-primary:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.atum-radio-hero-btn-secondary {
+  background: transparent;
+  color: var(--atum-fg);
+  border: 1px solid var(--atum-border);
+}
+
+.atum-radio-hero-btn-secondary:hover:not(:disabled) {
+  border-color: var(--atum-fg);
+  filter: brightness(1.05);
+}
+
+.atum-radio-hero-btn-icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  background: transparent;
+  color: var(--atum-muted);
+}
+
+.atum-radio-hero-btn-icon:hover:not(:disabled) {
+  color: var(--atum-fg);
+}
+
+.atum-radio-options-wrap {
+  position: relative;
+  margin-left: 0.25rem;
+}
+
+.atum-radio-options-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 0.25rem;
+  min-width: 160px;
+  padding: 0.25rem 0;
+  background: var(--atum-card);
+  border: 1px solid var(--atum-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 50;
+}
+
+.atum-radio-options-item {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 1rem;
+  border: none;
+  background: none;
+  color: var(--atum-fg);
+  font-size: 0.9rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.atum-radio-options-item:hover {
+  background: var(--atum-card-hover);
+}
+
+.atum-radio-options-item-danger {
+  color: var(--atum-error, #e74c3c);
+}
+
+/* Sintonia selector */
+.atum-radio-select-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.atum-radio-select-label {
+  font-size: 0.85rem;
+  color: var(--atum-muted);
+}
+
+.atum-radio-select {
+  padding: 0.4rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid var(--atum-border);
+  background: var(--atum-bg);
+  color: var(--atum-fg);
+  font-size: 0.9rem;
+  min-width: 160px;
+}
+
+.atum-radio-new-link {
+  background: none;
+  border: none;
+  color: var(--atum-accent);
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0;
+}
+
+.atum-radio-new-link:hover {
+  text-decoration: underline;
+}
+
+/* Content: Tracks table */
+.atum-radio-content {
+  border: 1px solid var(--atum-border);
+  border-radius: 12px;
+  background: var(--atum-card);
+  overflow: hidden;
+}
+
+.atum-radio-tracks-wrap {
+  min-height: 120px;
+}
+
+.atum-radio-tracks-loading,
+.atum-radio-tracks-empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--atum-muted);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.atum-radio-tracks-empty-state {
+  padding: 2rem 1rem;
+  text-align: center;
+}
+
+.atum-radio-tracks-empty-state .atum-radio-tracks-empty {
+  margin-bottom: 1rem;
+}
+
+.atum-radio-tracks-empty-state .atum-radio-hero-btn {
+  margin: 0 auto;
+}
+
+.atum-radio-tracks-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.atum-radio-tracks-table thead {
+  position: sticky;
+  top: 0;
+  background: var(--atum-card);
+  z-index: 1;
+  border-bottom: 1px solid var(--atum-border);
+}
+
+.atum-radio-tracks-table th {
+  text-align: left;
+  padding: 0.5rem 1rem;
+  font-weight: 600;
+  color: var(--atum-muted);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.atum-radio-tracks-table th:first-child {
+  width: 3rem;
+  text-align: right;
+}
+
+.atum-radio-track-row {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.atum-radio-track-row:hover {
+  background: var(--atum-card-hover);
+}
+
+.atum-radio-track-row:focus-visible {
+  outline: 2px solid var(--atum-accent);
+  outline-offset: -2px;
+}
+
+.atum-radio-tracks-table td {
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--atum-border);
+  vertical-align: middle;
+}
+
+.atum-radio-tracks-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.atum-radio-track-num {
+  width: 3rem;
+  text-align: right;
+  color: var(--atum-muted);
+  font-size: 0.9rem;
+}
+
+.atum-radio-track-title-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.atum-radio-track-title {
+  font-weight: 500;
+}
+
+.atum-radio-track-artist {
+  font-size: 0.85rem;
+  color: var(--atum-muted);
+}
+
+.atum-radio-track-album {
+  color: var(--atum-muted);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ——— Modal (unchanged structure, reuse names) ——— */
+.atum-radio-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 100;
+}
+
+.atum-radio-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--atum-card);
+  border: 1px solid var(--atum-border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  max-width: 90vw;
+  width: 420px;
+  max-height: 85vh;
+  overflow: auto;
+  z-index: 101;
+}
+
+.atum-radio-modal-title {
+  margin: 0 0 1rem;
+  font-size: 1.25rem;
+}
+
+.atum-radio-modal-label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--atum-muted);
+}
+
+.atum-radio-modal-input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--atum-border);
+  border-radius: 6px;
+  background: var(--atum-bg);
+  color: var(--atum-fg);
+  font-size: 1rem;
+  margin-bottom: 1rem;
+}
+
+.atum-radio-modal-rules {
+  margin-bottom: 1rem;
+}
+
+.atum-radio-modal-rules-label {
+  font-size: 0.9rem;
+  color: var(--atum-muted);
+  margin-bottom: 0.5rem;
+}
+
+.atum-radio-modal-rule {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.atum-radio-modal-rule-kind,
+.atum-radio-modal-rule-type {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--atum-border);
+  border-radius: 6px;
+  background: var(--atum-bg);
+  color: var(--atum-fg);
+  font-size: 0.9rem;
+}
+
+.atum-radio-modal-rule-value {
+  flex: 1;
+  min-width: 100px;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--atum-border);
+  border-radius: 6px;
+  background: var(--atum-bg);
+  color: var(--atum-fg);
+  font-size: 0.9rem;
+}
+
+.atum-radio-modal-cover {
+  margin-bottom: 1rem;
+}
+
+.atum-radio-modal-cover-row {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.atum-radio-modal-cover-preview {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--atum-border);
+}
+
+.atum-radio-modal-cover-placeholder {
+  width: 80px;
+  height: 80px;
+  border-radius: 8px;
+  border: 1px dashed var(--atum-border);
+  background: var(--atum-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  color: var(--atum-muted);
+}
+
+.atum-radio-modal-cover-input-hidden {
+  position: absolute;
+  width: 0.1px;
+  height: 0.1px;
+  opacity: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+.atum-radio-modal-rule-remove {
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--atum-muted);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.atum-radio-modal-rule-remove:hover {
+  background: var(--atum-border);
+  color: var(--atum-fg);
+}
+
+.atum-radio-modal-rule-buttons {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.atum-radio-modal-add-rule {
+  padding: 0.35rem 0.75rem;
+  border: 1px dashed var(--atum-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--atum-muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.atum-radio-modal-add-rule:hover {
+  color: var(--atum-fg);
+  border-color: var(--atum-fg);
+}
+
+.atum-radio-modal-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
+
+.atum-radio-btn {
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--atum-border);
+  background: var(--atum-bg);
+  color: var(--atum-fg);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.atum-radio-btn:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.atum-radio-btn-play {
+  background: var(--atum-accent);
+  color: #000;
+  border-color: var(--atum-accent);
+  font-weight: 600;
+}

@@ -20,6 +20,10 @@
   --atum-text: #e5e5e5;
   --atum-text-muted: #a0a0a0;
   --atum-border: #2a2a2a;
+  --atum-active: var(--atum-accent);
+  --atum-muted: #888888;
+  --atum-fg: #eeeeee;
+  --atum-error: #e74c3c;
 }
 
 * {

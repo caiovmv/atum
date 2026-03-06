@@ -12,7 +12,6 @@ from .client import create_client_from_settings
 from .config import get_settings
 from .db import (
     add_feed_record,
-    connection,
     get_feed_by_id,
     is_processed,
     list_feed_records,
@@ -21,6 +20,7 @@ from .db import (
     pending_delete,
     pending_list,
 )
+from .metadata_from_name import parse_metadata_from_name
 from .quality import matches_format, parse_format_filter, parse_quality
 from .quality_video import (
     matches_format_video,
@@ -90,11 +90,73 @@ def _matches_include_exclude(title: str, include: list[str] | None, exclude: lis
     return True
 
 
-def _collect_new_items(conn, format_filter: str | None, include_list, exclude_list) -> list[dict]:
+def _normalized_content_key(title: str) -> str:
+    """Chave para deduplicação: cleaned_title + ano (mesmo conteúdo = mesmo key)."""
+    meta = parse_metadata_from_name(title or "")
+    cleaned = (meta.cleaned_title or "").strip().lower()
+    year = meta.year or 0
+    return f"{cleaned}|{year}"
+
+
+def poll_feeds_api(
+    format_filter: str | None = None,
+    include: str | None = None,
+    exclude: str | None = None,
+    existing_completed_names: list[str] | None = None,
+) -> dict:
+    """Verifica feeds, salva novidades em feed_pending e marca como processados.
+    Se existing_completed_names for passado, itens com mesmo título+ano (normalizado) são ignorados (dedup).
+    Retorna dict com saved (int), new_items (list), errors (list), deduped (int). Para uso pela API (sem typer)."""
+    include_list = [x.strip() for x in (include or "").split(",") if x.strip()] or None
+    exclude_list = [x.strip() for x in (exclude or "").split(",") if x.strip()] or None
+    existing_keys: set[str] = set()
+    if existing_completed_names:
+        for name in existing_completed_names:
+            if name and isinstance(name, str):
+                existing_keys.add(_normalized_content_key(name))
+    errors: list[str] = []
+    rows = list_feed_records()
+    if not rows:
+        return {"saved": 0, "new_items": [], "errors": ["Nenhum feed inscrito."], "deduped": 0}
+    items = _collect_new_items(format_filter, include_list, exclude_list)
+    if not items:
+        return {"saved": 0, "new_items": [], "errors": [], "deduped": 0}
+    saved = 0
+    deduped = 0
+    new_items: list[dict] = []
+    for it in items:
+        key = _normalized_content_key(it["title"])
+        if existing_keys and key in existing_keys:
+            deduped += 1
+            mark_processed(it["feed_id"], it["entry_id"], entry_link=it["link"], title=it["title"])
+            continue
+        pid = pending_add(
+            it["feed_id"],
+            it["entry_id"],
+            it["title"],
+            it["link"],
+            it["quality_label"],
+        )
+        if pid:
+            saved += 1
+            new_items.append({
+                "id": pid,
+                "feed_id": it["feed_id"],
+                "entry_id": it["entry_id"],
+                "title": it["title"],
+                "link": it["link"],
+                "quality_label": it["quality_label"],
+                "content_type": it.get("content_type") or "music",
+            })
+        mark_processed(it["feed_id"], it["entry_id"], entry_link=it["link"], title=it["title"])
+    return {"saved": saved, "new_items": new_items, "errors": errors, "deduped": deduped}
+
+
+def _collect_new_items(format_filter: str | None, include_list, exclude_list) -> list[dict]:
     """Coleta todos os itens novos dos feeds que passam nos filtros. Não marca como processado.
     Para feeds com content_type movies/tv usa qualidade de vídeo; senão qualidade de áudio."""
     items: list[dict] = []
-    rows = list_feed_records(conn=conn)
+    rows = list_feed_records()
     for rec in rows:
         feed_id = rec["id"]
         url = rec["url"]
@@ -116,11 +178,11 @@ def _collect_new_items(conn, format_filter: str | None, include_list, exclude_li
         entries = getattr(parsed, "entries", []) or []
         for entry in entries:
             entry_id = _entry_id(entry)
-            if is_processed(feed_id, entry_id, conn=conn):
+            if is_processed(feed_id, entry_id):
                 continue
             title = (getattr(entry, "title", None) or "").strip()
             if not _matches_include_exclude(title, include_list, exclude_list):
-                mark_processed(feed_id, entry_id, entry_link=None, title=title, conn=conn)
+                mark_processed(feed_id, entry_id, entry_link=None, title=title)
                 continue
             link = _entry_link(entry)
             if use_video:
@@ -130,7 +192,7 @@ def _collect_new_items(conn, format_filter: str | None, include_list, exclude_li
                 quality = parse_quality(title)
                 accept = allowed is None or matches_format(quality, allowed)
             if not accept:
-                mark_processed(feed_id, entry_id, entry_link=link, title=title, conn=conn)
+                mark_processed(feed_id, entry_id, entry_link=link, title=title)
                 continue
             items.append({
                 "feed_id": feed_id,
@@ -166,74 +228,72 @@ def poll_feeds(
         client = create_client_from_settings(s)
     use_organize = organize if organize is not None else getattr(s, "organize_by_artist_album", False)
 
-    with connection() as conn:
-        rows = list_feed_records(conn=conn)
-        if not rows:
-            typer.echo("Nenhum feed inscrito. Use: feed add <url>")
-            return
+    rows = list_feed_records()
+    if not rows:
+        typer.echo("Nenhum feed inscrito. Use: feed add <url>")
+        return
 
-        items = _collect_new_items(conn, format_filter, include_list, exclude_list)
-        if not items:
-            typer.echo("Nenhuma novidade.")
-            return
+    items = _collect_new_items(format_filter, include_list, exclude_list)
+    if not items:
+        typer.echo("Nenhuma novidade.")
+        return
 
-        if auto_download:
-            from .organize import extract_subpath_by_content_type
+    if auto_download:
+        from .organize import extract_subpath_by_content_type
 
-            save_path_base = (getattr(s, "download_dir", "") or s.watch_folder or "./downloads").strip()
-            save_path_base = str(Path(save_path_base).expanduser().resolve())
-            for it in items:
-                title = it["title"]
-                link = it["link"]
-                quality_label = it["quality_label"]
-                content_type = it.get("content_type") or "music"
-                if content_type not in ("music", "movies", "tv"):
-                    content_type = "music"
-                typer.echo(f"  Novo: [{quality_label}] {title[:70]}{'...' if len(title) > 70 else ''}")
-                if link:
-                    if use_download_queue:
-                        from .download_manager import add as download_add, start as download_start
-                        if use_organize and title:
-                            subpath = extract_subpath_by_content_type(title, content_type)
-                            save_path = str(Path(save_path_base) / subpath)
-                        else:
-                            save_path = save_path_base
-                        did = download_add(link, save_path, title, content_type=content_type)
-                        if did > 0:
-                            download_start(did)
-                            typer.echo("    -> Enfileirado para download em background.")
-                        else:
-                            typer.echo("    -> Falha ao enfileirar.")
-                    else:
-                        if client.add(link):
-                            typer.echo("    -> Adicionado ao cliente.")
-                        else:
-                            typer.echo("    -> Falha ao adicionar.")
-                else:
-                    typer.echo("    -> Sem link magnet/torrent.")
-                try:
-                    from .notify import send_notification
-                    send_notification("dl-torrent: novo no feed", title[:200])
-                except Exception:
-                    pass
-                mark_processed(it["feed_id"], it["entry_id"], entry_link=link, title=title, conn=conn)
-            return
-
-        # Sem auto_download: salva no DB para o usuário escolher depois com 'feed pending'
-        saved = 0
+        save_path_base = (getattr(s, "download_dir", "") or s.watch_folder or "./downloads").strip()
+        save_path_base = str(Path(save_path_base).expanduser().resolve())
         for it in items:
-            pid = pending_add(
-                it["feed_id"],
-                it["entry_id"],
-                it["title"],
-                it["link"],
-                it["quality_label"],
-                conn=conn,
-            )
-            if pid:
-                saved += 1
-            mark_processed(it["feed_id"], it["entry_id"], entry_link=it["link"], title=it["title"], conn=conn)
-        typer.echo(f"{saved} item(ns) salvo(s) no banco. Use 'dl-torrent feed pending' para listar e escolher o que baixar.")
+            title = it["title"]
+            link = it["link"]
+            quality_label = it["quality_label"]
+            content_type = it.get("content_type") or "music"
+            if content_type not in ("music", "movies", "tv"):
+                content_type = "music"
+            typer.echo(f"  Novo: [{quality_label}] {title[:70]}{'...' if len(title) > 70 else ''}")
+            if link:
+                if use_download_queue:
+                    from .download_manager import add as download_add, start as download_start
+                    if use_organize and title:
+                        subpath = extract_subpath_by_content_type(title, content_type)
+                        save_path = str(Path(save_path_base) / subpath)
+                    else:
+                        save_path = save_path_base
+                    did = download_add(link, save_path, title, content_type=content_type)
+                    if did > 0:
+                        download_start(did)
+                        typer.echo("    -> Enfileirado para download em background.")
+                    else:
+                        typer.echo("    -> Falha ao enfileirar.")
+                else:
+                    if client.add(link):
+                        typer.echo("    -> Adicionado ao cliente.")
+                    else:
+                        typer.echo("    -> Falha ao adicionar.")
+            else:
+                typer.echo("    -> Sem link magnet/torrent.")
+            try:
+                from .notify import send_notification
+                send_notification("dl-torrent: novo no feed", title[:200])
+            except Exception:
+                pass
+            mark_processed(it["feed_id"], it["entry_id"], entry_link=link, title=title)
+        return
+
+    # Sem auto_download: salva no DB para o usuário escolher depois com 'feed pending'
+    saved = 0
+    for it in items:
+        pid = pending_add(
+            it["feed_id"],
+            it["entry_id"],
+            it["title"],
+            it["link"],
+            it["quality_label"],
+        )
+        if pid:
+            saved += 1
+        mark_processed(it["feed_id"], it["entry_id"], entry_link=it["link"], title=it["title"])
+    typer.echo(f"{saved} item(ns) salvo(s) no banco. Use 'dl-torrent feed pending' para listar e escolher o que baixar.")
 
 
 def run_pending_selection(settings=None, organize: bool = False) -> int:

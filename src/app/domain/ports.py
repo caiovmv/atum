@@ -14,8 +14,9 @@ class DownloadRepository(Protocol):
         save_path: str,
         name: str | None = None,
         content_type: str | None = None,
+        excluded_file_indices: list[int] | None = None,
     ) -> int:
-        """Adiciona download à fila. Retorna id."""
+        """Adiciona download à fila. excluded_file_indices: índices de arquivos a não baixar. Retorna id."""
         ...
 
     def list(self, status_filter: str | None = None) -> list[dict]:
@@ -51,6 +52,10 @@ class DownloadRepository(Protocol):
         cover_path_large: str | None = None,
     ) -> None:
         """Define caminhos das capas (pequena/grande) no disco."""
+        ...
+
+    def set_torrent_files(self, download_id: int, files: list[dict] | None) -> None:
+        """Define a lista de arquivos do torrent (ex.: [{index, path, size}, ...])."""
         ...
 
     def update_progress(

@@ -12,15 +12,30 @@ DOWNLOAD_COLUMNS = (
     ", content_path, content_type"
     ", cover_path_small, cover_path_large"
     ", year, video_quality_label, audio_codec, music_quality"
+    ", excluded_file_indices, torrent_files"
 )
 
 
 def _apply_defaults(rows: list[dict]) -> None:
+    import json
     for row in rows:
         for k in ("num_seeds", "num_peers", "download_speed_bps", "total_bytes", "downloaded_bytes", "eta_seconds",
                   "content_path", "content_type", "cover_path_small", "cover_path_large",
-                  "year", "video_quality_label", "audio_codec", "music_quality"):
+                  "year", "video_quality_label", "audio_codec", "music_quality", "excluded_file_indices", "torrent_files"):
             row.setdefault(k, None)
+        raw = row.get("excluded_file_indices")
+        if isinstance(raw, str) and raw.strip():
+            try:
+                row["excluded_file_indices"] = json.loads(raw)
+            except (ValueError, TypeError):
+                row["excluded_file_indices"] = []
+        elif raw is None or (isinstance(raw, list) and not raw):
+            row["excluded_file_indices"] = []
+        elif not isinstance(row.get("excluded_file_indices"), list):
+            row["excluded_file_indices"] = []
+        tf = row.get("torrent_files")
+        if tf is not None and not isinstance(tf, list):
+            row["torrent_files"] = None
 
 
 class PostgresDownloadRepository:
@@ -35,13 +50,16 @@ class PostgresDownloadRepository:
         save_path: str,
         name: str | None = None,
         content_type: str | None = None,
+        excluded_file_indices: list[int] | None = None,
     ) -> int:
+        import json
+        indices_json = json.dumps(excluded_file_indices) if excluded_file_indices else None
         with connection_postgres(self._database_url) as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "INSERT INTO downloads (magnet, name, save_path, status, content_type) VALUES (%s, %s, %s, %s, %s) RETURNING id",
+                    "INSERT INTO downloads (magnet, name, save_path, status, content_type, excluded_file_indices) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
                     (magnet.strip(), (name or "").strip() or None, save_path, DownloadStatus.QUEUED.value,
-                     content_type if content_type in ("music", "movies", "tv") else None),
+                     content_type if content_type in ("music", "movies", "tv") else None, indices_json),
                 )
                 row = cur.fetchone()
                 conn.commit()
@@ -125,6 +143,16 @@ class PostgresDownloadRepository:
                 cur.execute(
                     "UPDATE downloads SET cover_path_small = %s, cover_path_large = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
                     (cover_path_small, cover_path_large, download_id),
+                )
+            conn.commit()
+
+    def set_torrent_files(self, download_id: int, files: list[dict] | None) -> None:
+        import json
+        with connection_postgres(self._database_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE downloads SET torrent_files = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+                    (json.dumps(files) if files else None, download_id),
                 )
             conn.commit()
 

@@ -1,0 +1,41 @@
+.empty-state {
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+  color: var(--atum-text-muted);
+}
+
+.empty-state-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  opacity: 0.9;
+}
+
+.empty-state-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--atum-text);
+  margin: 0 0 0.5rem;
+}
+
+.empty-state-description {
+  font-size: 0.95rem;
+  margin: 0 0 1.25rem;
+  max-width: 360px;
+  margin-left: auto;
+  margin-right: auto;
+  line-height: 1.5;
+}
+
+.empty-state-action {
+  margin-top: 0.5rem;
+}
+
+.empty-state-action a {
+  color: var(--atum-accent);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.empty-state-action a:hover {
+  text-decoration: underline;
+}

@@ -31,7 +31,8 @@ class TestSettings:
         s = Settings.model_construct()
         assert s.x1337_base_url == "https://www.1377x.to"
         assert s.tpb_base_url == "https://tpb.party"
-        assert s.tg_base_url == "https://torrentgalaxy.to"
+        assert s.yts_base_url == "https://yts.lt"
+        assert s.limetorrents_base_url == "https://www.limetorrents.lol"
 
     def test_default_watch_folder_and_download_dir(self) -> None:
         s = Settings.model_construct()

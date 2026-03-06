@@ -1,13 +1,5 @@
 """Repositórios de persistência (feeds, downloads)."""
 
-from .download_repository import (
-    download_add,
-    download_delete,
-    download_get,
-    download_list,
-    download_set_pid,
-    download_update_status,
-)
 from .feed_repository import (
     add_feed_record,
     get_feed_by_id,
@@ -24,10 +16,4 @@ __all__ = [
     "mark_processed",
     "get_feed_by_url",
     "get_feed_by_id",
-    "download_add",
-    "download_list",
-    "download_get",
-    "download_update_status",
-    "download_set_pid",
-    "download_delete",
 ]

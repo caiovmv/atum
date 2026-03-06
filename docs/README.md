@@ -6,6 +6,7 @@ Esta documentação é voltada ao uso diário do dl-torrent: instalação, confi
 
 - [Instalação](installation.md) — Pré-requisitos, instalação passo a passo, Windows e download direto
 - [Configuração](configuration.md) — Variáveis de ambiente (`.env`) e onde ficam os dados
+- [Banco de dados (PostgreSQL)](database.md) — Schema, migrations, zerar banco e subir projeto do zero
 - [Interface web (Atum)](web-interface.md) — Subir Runner, API e console no navegador
 - [Comandos](commands.md) — Referência de todos os subcomandos (search, batch, history, wishlist, feed, download, resolve)
 - [Feeds RSS e agendamento](feeds-and-scheduling.md) — Inscrever em feeds e agendar o poll (cron / Task Scheduler)

@@ -9,8 +9,13 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from ...deps import get_repo, get_settings
+from ...indexer_status import get_enabled_indexers
 from ...metadata_from_name import parse_metadata_from_name
+from ...quality import parse_quality
 from ...search import (
+    ALL_INDEXERS,
+    DEFAULT_INDEXERS,
+    SearchResult,
     get_magnet_for_result,
     result_to_dict,
     search_all,
@@ -33,9 +38,13 @@ def search(
     indexers: str | None = Query(None, description="Indexadores separados por vírgula (padrão: todos)."),
 ) -> list[dict]:
     """Busca torrents. Retorna lista com metadados parseados (parsed_year, etc.)."""
-    from ...search import ALL_INDEXERS, DEFAULT_INDEXERS
-    indexer_list = [x.strip().lower() for x in (indexers or ",".join(DEFAULT_INDEXERS)).split(",") if x.strip()]
-    indexer_list = [x for x in indexer_list if x in ALL_INDEXERS]
+    s = get_settings()
+    if indexers and indexers.strip():
+        indexer_list = [x.strip().lower() for x in indexers.split(",") if x.strip()]
+        indexer_list = [x for x in indexer_list if x in ALL_INDEXERS]
+    else:
+        enabled = get_enabled_indexers(s.redis_url or None)
+        indexer_list = [x for x in enabled if x in DEFAULT_INDEXERS]
     if not indexer_list:
         indexer_list = list(DEFAULT_INDEXERS)
     results = search_all(
@@ -52,6 +61,10 @@ def search(
     out: list[dict] = []
     for r in results:
         d = result_to_dict(r)
+        if not d.get("magnet"):
+            resolved = get_magnet_for_result(r)
+            if resolved:
+                d["magnet"] = resolved
         meta = parse_metadata_from_name(r.title)
         d["parsed_year"] = meta.year
         d["parsed_video_quality"] = meta.video_quality_label
@@ -60,6 +73,33 @@ def search(
         d["parsed_cleaned_title"] = meta.cleaned_title or None
         out.append(d)
     return out
+
+
+class ResolveMagnetBody(BaseModel):
+    """Corpo para resolver magnet de um resultado (ex.: 1337x que não traz magnet na listagem)."""
+    indexer: str
+    torrent_id: str
+
+
+@router.post("/search/resolve-magnet")
+def resolve_magnet(body: ResolveMagnetBody) -> dict:
+    """Resolve o magnet para um resultado quando não veio na busca (ex.: 1337x). Permite ao frontend obter o link ao clicar no card."""
+    indexer = (body.indexer or "").strip().lower()
+    torrent_id = (body.torrent_id or "").strip()
+    if not indexer or indexer not in ALL_INDEXERS or not torrent_id:
+        return {"magnet": None}
+    fake = SearchResult(
+        title="",
+        quality=parse_quality(""),
+        seeders=0,
+        size="",
+        torrent_id=torrent_id,
+        indexer=indexer,
+        magnet=None,
+        torrent_url=None,
+    )
+    magnet = get_magnet_for_result(fake)
+    return {"magnet": magnet}
 
 
 @router.get("/search-filter-suggestions")
@@ -113,6 +153,15 @@ def _runner_url(path: str) -> str:
 def add_from_search(body: AddFromSearchBody) -> dict:
     """Reexecuta a busca, resolve magnets dos índices e envia ao Runner."""
     full_query = f"{body.query} {body.album or ''}".strip()
+    s = get_settings()
+    indexer_list = body.indexers
+    if not indexer_list:
+        enabled = get_enabled_indexers(s.redis_url or None)
+        indexer_list = [x for x in enabled if x in DEFAULT_INDEXERS] or list(DEFAULT_INDEXERS)
+    else:
+        indexer_list = [x.strip().lower() for x in indexer_list if x and x.strip() and x.strip().lower() in ALL_INDEXERS]
+        if not indexer_list:
+            indexer_list = list(DEFAULT_INDEXERS)
     results = search_all(
         query=full_query,
         limit=body.limit,
@@ -121,7 +170,7 @@ def add_from_search(body: AddFromSearchBody) -> dict:
         verbose=False,
         music_category_only=body.music_category_only,
         content_type=body.content_type,
-        indexers=body.indexers,
+        indexers=indexer_list,
         sort_by=body.sort_by,
     )
     s = get_settings()

@@ -1,0 +1,269 @@
+.atum-library {
+  padding: 0 0 1rem;
+}
+
+.atum-library-title {
+  font-size: 1.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.atum-library-desc {
+  color: var(--atum-muted);
+  margin-bottom: 1rem;
+}
+
+.atum-library-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.atum-library-tab {
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--atum-border);
+  border-radius: 999px;
+  background: var(--atum-card);
+  color: var(--atum-text-muted);
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background 0.2s, color 0.2s;
+}
+
+.atum-library-tab--active {
+  background: var(--atum-accent);
+  border-color: var(--atum-accent);
+  color: #000;
+}
+
+.atum-library-tab:hover {
+  filter: brightness(1.1);
+}
+
+.atum-library-video-kind,
+.atum-library-view-by {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.atum-library-view-by-label,
+.atum-library-tags-label {
+  font-size: 0.9rem;
+  color: var(--atum-muted);
+  margin-right: 0.25rem;
+}
+
+.atum-library-facets,
+.atum-library-tags {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.atum-library-facet-chip {
+  padding: 0.35rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--atum-border);
+  background: var(--atum-card);
+  color: var(--atum-text);
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.atum-library-facet-chip--active {
+  background: var(--atum-accent);
+  border-color: var(--atum-accent);
+  color: #000;
+}
+
+.atum-library-facet-chip:hover {
+  filter: brightness(1.1);
+}
+
+.atum-library-filters {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.atum-library-filters input,
+.atum-library-filters select {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--atum-border);
+  border-radius: 24px;
+  background: var(--atum-card);
+  color: var(--atum-text);
+  min-height: 44px;
+}
+
+.atum-library-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.atum-library-card {
+  background: var(--atum-card);
+  border: 1px solid var(--atum-border);
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.atum-library-card-cover {
+  aspect-ratio: 2/3;
+  width: 100%;
+  overflow: hidden;
+  background: var(--atum-bg);
+}
+
+.atum-library-card-cover img,
+.atum-library-card-cover .cover-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.atum-library-card-body {
+  padding: 0.6rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.atum-library-card-name {
+  font-weight: 500;
+  font-size: 0.9rem;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.atum-library-card-meta {
+  font-size: 0.8rem;
+  color: var(--atum-muted);
+}
+
+.atum-library-card-actions {
+  margin-top: auto;
+  padding-top: 0.5rem;
+}
+
+.atum-btn {
+  padding: 0.5rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--atum-border);
+  background: var(--atum-card);
+  color: var(--atum-text);
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.2s, filter 0.2s;
+}
+
+.atum-btn-primary {
+  background: var(--atum-accent);
+  border-color: var(--atum-accent);
+  color: #000;
+}
+
+.atum-btn:hover {
+  filter: brightness(1.1);
+}
+
+.atum-library-card-actions .atum-btn {
+  padding: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.atum-library-card-actions-inner {
+  display: flex;
+  gap: 0.35rem;
+  width: 100%;
+}
+
+.atum-library-card-actions-inner .atum-btn-primary {
+  flex: 1;
+}
+
+.atum-library-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.atum-library-video-kind .atum-btn {
+  border-radius: 999px;
+}
+
+.atum-library-modal {
+  background: var(--atum-card);
+  border: 1px solid var(--atum-border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  max-width: 420px;
+  width: 100%;
+  max-height: 90vh;
+  overflow: auto;
+}
+
+.atum-library-modal-title {
+  font-size: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.atum-library-modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.atum-library-modal-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+}
+
+.atum-library-modal-form input {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--atum-border);
+  border-radius: 6px;
+  background: var(--atum-card);
+  color: var(--atum-text);
+}
+
+.atum-library-modal-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.atum-library-empty {
+  color: var(--atum-muted);
+  padding: 2rem;
+  text-align: center;
+}
+
+.atum-library-tab:focus-visible,
+.atum-library-facet-chip:focus-visible,
+.atum-btn:focus-visible {
+  outline: 2px solid var(--atum-accent);
+  outline-offset: 2px;
+}

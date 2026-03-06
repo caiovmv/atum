@@ -25,7 +25,7 @@ No **Windows**, se for usar download direto (`--download-direct`), pode ser nece
 
 ## O que o dl-torrent faz
 
-- **Busca** em 1337x, The Pirate Bay e TorrentGalaxy, com filtro por qualidade (FLAC, ALAC, MP3 320, MP3 até 198 kbps).
+- **Busca** em 1337x, The Pirate Bay, YTS, EZTV, NYAA e Limetorrents, com filtro por qualidade (FLAC, ALAC, MP3 320, MP3 até 198 kbps).
 - **Envio** do magnet para Transmission, uTorrent ou para uma pasta (ex.: FrostWire).
 - **Download direto** dos arquivos (sem cliente externo) com `--download-direct`; opção **`--organize`** para criar subpastas Artist/Album.
 - **Batch:** comando `batch` para processar uma lista (arquivo ou stdin): cada linha vira uma busca e baixa o melhor resultado — ideal para listas do Spotify, Last.fm ou “Radar de Trend”.
@@ -33,6 +33,7 @@ No **Windows**, se for usar download direto (`--download-direct`), pode ser nece
 - **Feeds RSS** de torrents de música: inscrever, verificar novidades (com auto-download), filtros **`--include`** e **`--exclude`**, e **`feed daemon`** para poll em loop (alternativa ao cron).
 - **Notificação** ao detectar novo item no feed (webhook ou desktop), via variáveis no `.env`.
 - **Resolução de álbum** via Last.fm (opcional) para buscar por nome de álbum.
+- **Status dos indexadores:** o comando `indexers daemon` testa periodicamente cada fonte com um **probe de busca** (mesmo código da API); fontes que falham são desativadas na busca até voltarem.
 
 ## Clientes suportados
 

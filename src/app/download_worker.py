@@ -1,4 +1,4 @@
-"""Worker que roda em thread ou subprocesso para um download (TorrentP). Atualiza status no DB."""
+"""Worker que roda em thread ou subprocesso para um download (libtorrent direto ou TorrentP fallback). Atualiza status no DB."""
 
 from __future__ import annotations
 
@@ -6,12 +6,17 @@ import asyncio
 import os
 import sys
 import tempfile
+import time
 import urllib.request
 from pathlib import Path
 from threading import Event as ThreadEvent
 from threading import Thread
 
 from .domain import DownloadStatus
+
+# Rate-limit: não persistir progresso mais que uma vez por segundo por download_id
+_LAST_PROGRESS_WRITE: dict[int, float] = {}
+_MIN_PERSIST_INTERVAL = 1.0
 
 
 def _resolve_torrent_input(magnet_or_url: str) -> tuple[str, str | None]:
@@ -46,10 +51,15 @@ def _resolve_torrent_input(magnet_or_url: str) -> tuple[str, str | None]:
 
 def _update_progress_from_status(download_id: int, status: object) -> None:
     """Escreve progresso no DB a partir do status do libtorrent.
-    Não sobrescreve se o download já estiver marcado como completed (evita race com o worker)."""
+    Não sobrescreve se o download já estiver marcado como completed (evita race com o worker).
+    Rate-limit: não persiste mais que uma vez por segundo por download_id."""
     from .deps import get_repo
 
     try:
+        now = time.monotonic()
+        last = _LAST_PROGRESS_WRITE.get(download_id, 0.0)
+        if now - last < _MIN_PERSIST_INTERVAL:
+            return
         repo = get_repo()
         row = repo.get(download_id)
         if row and (row.get("status") or "").lower() == DownloadStatus.COMPLETED.value:
@@ -77,6 +87,7 @@ def _update_progress_from_status(download_id: int, status: object) -> None:
             downloaded_bytes=total_done,
             eta_seconds=eta_seconds,
         )
+        _LAST_PROGRESS_WRITE[download_id] = now
     except Exception:
         pass
 
@@ -107,70 +118,65 @@ def run_worker(download_id: int, stop_event: ThreadEvent | None = None) -> None:
 
     temp_path_to_remove: str | None = None
     stopped_by_user = False
+    completed_success = False
     try:
         torrent_input, temp_path_to_remove = _resolve_torrent_input(magnet_or_url)
 
-        from torrentp import TorrentDownloader
-        from torrentp.downloader import Downloader
+        # Libtorrent direto (DHT, trackers, porta configuráveis). Sem fallback TorrentP.
+        try:
+            from .client.libtorrent_engine import run_download
+        except ImportError as e:
+            msg = (
+                "libtorrent não disponível. Instale: pip install libtorrent (ou libtorrent-windows-dll no Windows). "
+                "Diagnóstico: python scripts/debug_libtorrent.py."
+            )
+            repo.update_status(download_id, DownloadStatus.FAILED.value, error_message=msg)
+            raise RuntimeError(msg) from e
 
-        _original_download = Downloader.download
-
-        async def _patched_download(self: object) -> None:
-            did_str = os.environ.get("DL_TORRENT_DOWNLOAD_ID")
-            download_id_int = int(did_str) if did_str else 0
-            updater_task: asyncio.Task | None = None
-
-            async def _progress_updater() -> None:
-                while True:
-                    if stop_event and stop_event.is_set():
-                        try:
-                            self.stop()
-                        except Exception:
-                            pass
-                        return
-                    try:
-                        st = self.status()
-                        _update_progress_from_status(download_id_int, st)
-                    except Exception:
-                        pass
-                    await asyncio.sleep(1)
-
-            if download_id_int:
-                updater_task = asyncio.create_task(_progress_updater())
-            try:
-                await _original_download(self)
-            finally:
-                if updater_task:
-                    updater_task.cancel()
-                    try:
-                        await updater_task
-                    except asyncio.CancelledError:
-                        pass
-
-        Downloader.download = _patched_download
-
+        from .deps import get_settings
         port = 6881 + (download_id % 500)
-        downloader = TorrentDownloader(torrent_input, save_path, port=port)
-        asyncio.run(downloader.start_download())
+        excluded = row.get("excluded_file_indices")
+        if not isinstance(excluded, list):
+            excluded = []
+        interval = max(0.25, get_settings().download_progress_interval_seconds)
+
+        def on_progress(st):
+            _update_progress_from_status(download_id, st)
+
+        success, torrent_name = run_download(
+            torrent_input,
+            save_path,
+            port,
+            progress_interval_seconds=interval,
+            progress_callback=on_progress,
+            stop_event=stop_event,
+            excluded_file_indices=excluded,
+        )
         if stop_event and stop_event.is_set():
             stopped_by_user = True
-        else:
+        elif success:
+            completed_success = True
             repo.update_status(download_id, DownloadStatus.COMPLETED.value, progress=100.0)
             repo.update_progress(download_id, progress=100.0, eta_seconds=0.0)
-            content_path = None
+            if torrent_name and str(torrent_name).strip():
+                content_path = str(Path(save_path) / str(torrent_name).strip())
+                repo.set_content_path(download_id, content_path)
+        else:
+            repo.update_status(download_id, DownloadStatus.FAILED.value, error_message="Download falhou ou timeout ao obter metadados.")
+
+        if not stopped_by_user and completed_success:
+            # Notificação: download concluído
+            name = (row.get("name") or "").strip()
             try:
-                inner = getattr(downloader, "_downloader", None)
-                if inner is not None:
-                    torrent_name = getattr(inner, "name", None)
-                    if callable(torrent_name):
-                        torrent_name = torrent_name()
-                    if torrent_name and str(torrent_name).strip():
-                        content_path = str(Path(save_path) / str(torrent_name).strip())
-                        repo.set_content_path(download_id, content_path)
+                from .db import notification_create
+                notification_create(
+                    "download_completed",
+                    f"Download concluído: {(name or 'Item')[:80]}",
+                    body=None,
+                    payload={"download_id": download_id, "name": name},
+                )
             except Exception:
                 pass
-            # Buscar e cachear capa em background (não bloqueia)
-            name = (row.get("name") or "").strip()
             content_type = (row.get("content_type") or "music") if row.get("content_type") in ("music", "movies", "tv") else "music"
             if name:
                 def _fetch_cover() -> None:
@@ -186,6 +192,17 @@ def run_worker(download_id: int, stop_event: ThreadEvent | None = None) -> None:
             stopped_by_user = True
         else:
             repo.update_status(download_id, DownloadStatus.FAILED.value, error_message=f"{type(e).__name__}: {e}")
+            try:
+                from .db import notification_create
+                name = (row.get("name") or "").strip() if row else ""
+                notification_create(
+                    "download_failed",
+                    f"Falha no download: {(name or str(download_id))[:60]}",
+                    body=str(e)[:200],
+                    payload={"download_id": download_id, "name": name},
+                )
+            except Exception:
+                pass
     finally:
         repo.set_pid(download_id, None)
         os.environ.pop("DL_TORRENT_DOWNLOAD_ID", None)

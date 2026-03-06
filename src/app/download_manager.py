@@ -49,8 +49,6 @@ def get_worker_alive(row: dict) -> bool | None:
 
 def restart_dead_workers() -> int:
     """Reinicia downloads em status 'downloading' cujo processo ou thread está morto. Retorna quantos foram reiniciados."""
-    import sqlite3
-
     repo = get_repo()
     rows = repo.list(status_filter=DownloadStatus.DOWNLOADING.value)
     restarted = 0
@@ -66,18 +64,10 @@ def restart_dead_workers() -> int:
             is_dead = t is None or not t.is_alive()
         if not is_dead:
             continue
-        for attempt in range(3):
-            try:
-                repo.update_status(did, DownloadStatus.QUEUED.value)
-                repo.set_pid(did, None)
-                if start(did):
-                    restarted += 1
-                break
-            except sqlite3.OperationalError as e:
-                if "locked" in str(e).lower() and attempt < 2:
-                    time.sleep(0.3 * (attempt + 1))
-                else:
-                    raise
+        repo.update_status(did, DownloadStatus.QUEUED.value)
+        repo.set_pid(did, None)
+        if start(did):
+            restarted += 1
     return restarted
 
 
@@ -86,11 +76,16 @@ def add(
     save_path: str,
     name: str | None = None,
     content_type: str | None = None,
+    excluded_file_indices: list[int] | None = None,
+    torrent_files: list[dict] | None = None,
 ) -> int:
-    """Adiciona um download à fila. content_type opcional: music, movies, tv. Retorna o id."""
+    """Adiciona um download à fila. content_type opcional: music, movies, tv. excluded_file_indices: índices a não baixar. torrent_files: lista opcional [{index, path, size}] para listagem consistente. Retorna o id."""
     save_path = str(Path(save_path).expanduser().resolve())
     Path(save_path).mkdir(parents=True, exist_ok=True)
-    return get_repo().add(magnet, save_path, name, content_type=content_type)
+    did = get_repo().add(magnet, save_path, name, content_type=content_type, excluded_file_indices=excluded_file_indices)
+    if did and torrent_files:
+        get_repo().set_torrent_files(did, torrent_files)
+    return did
 
 
 def list_downloads(status_filter: str | None = None) -> list[dict]:
@@ -110,12 +105,15 @@ def reconcile_downloads_with_filesystem() -> int:
     """Remove do DB registros completed cujo content_path não existe mais no disco; evict capa (Redis + arquivos).
     Para registros que permanecem, limpa cover_path no DB e evict se arquivo de capa não existir.
     Retorna quantos foram removidos."""
+    import logging
+    logger = logging.getLogger(__name__)
     try:
         from .web.cover_service import evict_cover_for_download
     except Exception:
         evict_cover_for_download = None
     repo = get_repo()
     rows = repo.list(status_filter=DownloadStatus.COMPLETED.value)
+    logger.info(f"  [reconcile] Verificando %d download(s) completed.", len(rows))
     removed = 0
     for r in rows:
         did = r["id"]
@@ -136,10 +134,12 @@ def reconcile_downloads_with_filesystem() -> int:
                             pass
                     if repo.delete(did):
                         removed += 1
+                        logger.info("  [reconcile] Removendo download id=%s (sem content_path, path inferido não existe).", did)
                     continue
             else:
                 continue
         if not Path(content_path).exists():
+            logger.info("  [reconcile] Removendo download id=%s (path não existe): %s", did, content_path)
             if evict_cover_for_download:
                 try:
                     evict_cover_for_download(did)

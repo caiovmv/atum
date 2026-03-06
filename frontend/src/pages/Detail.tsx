@@ -43,12 +43,12 @@ interface TmdbDetail {
   backdrop_url: string | null;
 }
 
+const INDEXER_LABELS: Record<string, string> = {
+  '1337x': '1337x', tpb: 'TPB', yts: 'YTS', eztv: 'EZTV', nyaa: 'NYAA',
+  limetorrents: 'Limetorrents', iptorrents: 'IPTorrents',
+};
 function indexerLabel(indexer: string): string {
-  const s = indexer.toLowerCase();
-  if (s === '1337x') return '1337x';
-  if (s === 'tpb') return 'TPB';
-  if (s === 'tg') return 'TorrentGalaxy';
-  return indexer;
+  return INDEXER_LABELS[indexer?.toLowerCase() ?? ''] ?? indexer ?? '—';
 }
 
 export function Detail() {
@@ -137,7 +137,7 @@ export function Detail() {
     return (
       <div className="atum-page detail-page">
         <p className="detail-message">Volte à busca e clique em um resultado para ver os detalhes.</p>
-        <Link to="/" className="detail-back-link">← Voltar à busca</Link>
+        <Link to="/search" className="detail-back-link">← Voltar à busca</Link>
       </div>
     );
   }
