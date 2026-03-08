@@ -53,9 +53,9 @@ def _ensure_schema_once(database_url: str) -> None:
     """Run schema + migrations only on first use per database_url (using sync pool)."""
     if database_url in _schema_initialized:
         return
+    pool = _get_pool(database_url)
     with _pool_lock:
         if database_url not in _schema_initialized:
-            pool = _get_pool(database_url)
             with pool.connection() as conn:
                 _ensure_schema_postgres(conn)
                 conn.commit()
