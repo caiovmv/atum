@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import feedparser
@@ -152,14 +153,37 @@ def poll_feeds_api(
     return {"saved": saved, "new_items": new_items, "errors": errors, "deduped": deduped}
 
 
+def _parse_feed(url: str) -> feedparser.FeedParserDict:
+    """Parse de um único feed (I/O-bound, roda em thread)."""
+    return feedparser.parse(url)
+
+
 def _collect_new_items(format_filter: str | None, include_list, exclude_list) -> list[dict]:
     """Coleta todos os itens novos dos feeds que passam nos filtros. Não marca como processado.
-    Para feeds com content_type movies/tv usa qualidade de vídeo; senão qualidade de áudio."""
+    Faz o download/parse dos feeds em paralelo via ThreadPoolExecutor."""
     items: list[dict] = []
     rows = list_feed_records()
-    for rec in rows:
-        feed_id = rec["id"]
-        url = rec["url"]
+    if not rows:
+        return items
+
+    # Fase 1: parse de todos os feeds em paralelo
+    parsed_feeds: dict[int, tuple[dict, feedparser.FeedParserDict]] = {}
+    max_workers = min(len(rows), 4)
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        future_to_rec = {pool.submit(_parse_feed, rec["url"]): rec for rec in rows}
+        for future in as_completed(future_to_rec):
+            rec = future_to_rec[future]
+            try:
+                parsed = future.result()
+                if getattr(parsed, "bozo_exception", None):
+                    typer.echo(f"Erro ao ler feed {rec['url']}: {parsed.bozo_exception}")
+                    continue
+                parsed_feeds[rec["id"]] = (rec, parsed)
+            except Exception as exc:
+                typer.echo(f"Erro ao ler feed {rec['url']}: {exc}")
+
+    # Fase 2: processar entries sequencialmente (envolve DB)
+    for feed_id, (rec, parsed) in parsed_feeds.items():
         content_type = rec.get("content_type") or "music"
         use_video = content_type in ("movies", "tv")
         allowed = (
@@ -171,10 +195,6 @@ def _collect_new_items(format_filter: str | None, include_list, exclude_list) ->
                 else parse_format_filter(format_filter)
             )
         )
-        parsed = feedparser.parse(url)
-        if getattr(parsed, "bozo_exception", None):
-            typer.echo(f"Erro ao ler feed {url}: {parsed.bozo_exception}")
-            continue
         entries = getattr(parsed, "entries", []) or []
         for entry in entries:
             entry_id = _entry_id(entry)
@@ -275,8 +295,9 @@ def poll_feeds(
             try:
                 from .notify import send_notification
                 send_notification("dl-torrent: novo no feed", title[:200])
-            except Exception:
-                pass
+            except Exception as exc:
+                import logging
+                logging.getLogger(__name__).debug("Falha ao enviar notificação de feed: %s", exc)
             mark_processed(it["feed_id"], it["entry_id"], entry_link=link, title=title)
         return
 

@@ -83,17 +83,20 @@ def run_health_cycle(
     retry_delay_sec: float = 2.0,
 ) -> dict[str, bool]:
     """
-    Executa um ciclo de health-check usando probe de busca (mesmo código que a API).
+    Executa um ciclo de health-check em paralelo usando probe de busca.
     Para cada indexador com base_url configurada, chama probe_indexer; em falha, faz
     uma nova tentativa após retry_delay_sec. Grava resultado no Redis e retorna { indexer: ok }.
     """
     import time
+    from concurrent.futures import ThreadPoolExecutor, as_completed
 
     from .search import probe_indexer
 
     base_urls = get_indexer_base_urls(settings)
-    result: dict[str, bool] = {}
-    for name in sorted(base_urls.keys()):
+    if not base_urls:
+        return {}
+
+    def _probe_one(name: str) -> tuple[str, bool]:
         try:
             ok = probe_indexer(name, settings=settings, timeout_sec=probe_timeout_sec)
             if not ok and retry_delay_sec > 0:
@@ -102,8 +105,15 @@ def run_health_cycle(
         except Exception as e:
             logger.warning("indexer_status run_health_cycle probe %s: %s", name, e)
             ok = False
-        result[name] = ok
-        if redis_url and (redis_url or "").strip():
-            set_indexer_status(redis_url, name, ok)
-        logger.info("indexer check %s: %s", name, "ok" if ok else "fail")
+        return name, ok
+
+    result: dict[str, bool] = {}
+    with ThreadPoolExecutor(max_workers=min(len(base_urls), 6)) as pool:
+        futures = {pool.submit(_probe_one, n): n for n in sorted(base_urls.keys())}
+        for future in as_completed(futures):
+            name, ok = future.result()
+            result[name] = ok
+            if redis_url and (redis_url or "").strip():
+                set_indexer_status(redis_url, name, ok)
+            logger.info("indexer check %s: %s", name, "ok" if ok else "fail")
     return result

@@ -37,15 +37,20 @@ export function Home() {
   const [libraryLoading, setLibraryLoading] = useState(true);
 
   useEffect(() => {
+    const controller = new AbortController();
     setLibraryLoading(true);
-    fetch('/api/library')
+    fetch('/api/library', { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : []))
       .then((list: LibraryItem[]) => {
         const playable = (list || []).filter((x) => x.content_path);
         setLibraryItems(playable.slice(0, LIBRARY_HOME_LIMIT));
       })
-      .catch(() => setLibraryItems([]))
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        setLibraryItems([]);
+      })
       .finally(() => setLibraryLoading(false));
+    return () => controller.abort();
   }, []);
 
   const playUrl = (item: LibraryItem) => {

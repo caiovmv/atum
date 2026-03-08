@@ -56,16 +56,17 @@ export function Player() {
       setLoading(false);
       return;
     }
+    const controller = new AbortController();
     setLoading(true);
     setError(null);
     const itemUrl = isImport ? `/api/library/imported/${numId}` : `/api/library/${numId}`;
     const filesUrl = isImport ? `/api/library/imported/${numId}/files` : `/api/library/${numId}/files`;
     Promise.all([
-      fetch(itemUrl).then((r) => {
+      fetch(itemUrl, { signal: controller.signal }).then((r) => {
         if (!r.ok) throw new Error(r.status === 404 ? 'Item não encontrado.' : r.statusText);
         return r.json();
       }),
-      fetch(filesUrl).then((r) => {
+      fetch(filesUrl, { signal: controller.signal }).then((r) => {
         if (!r.ok) return { files: [] };
         return r.json();
       }),
@@ -74,8 +75,12 @@ export function Player() {
         setItem(itemData);
         setFiles(Array.isArray(filesData?.files) ? filesData.files : []);
       })
-      .catch((err) => setError(err instanceof Error ? err.message : 'Erro'))
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        setError(err instanceof Error ? err.message : 'Erro');
+      })
       .finally(() => setLoading(false));
+    return () => controller.abort();
   }, [id, isImport]);
 
   const streamUrl = useMemo(() => {

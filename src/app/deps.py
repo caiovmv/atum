@@ -8,9 +8,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from .ai.llm_client import LLMClient
     from .config import Settings
     from .domain.ports import DownloadRepository
     from .repositories.library_import_repository_postgres import LibraryImportRepositoryPostgres
+    from .repositories.settings_repository_postgres import SettingsRepositoryPostgres
     from .web.cover_cache import CoverCache
 
 _overrides: dict[str, Any] = {}
@@ -46,6 +48,22 @@ def get_library_import_repo() -> "LibraryImportRepositoryPostgres | None":
         return _overrides["library_import_repo"]
     from .repositories.library_import_repository import get_library_import_repo as _get
     return _get()
+
+
+def get_settings_repo() -> "SettingsRepositoryPostgres | None":
+    """Retorna o repositório de app_settings (Postgres) ou None se não configurado."""
+    if "settings_repo" in _overrides:
+        return _overrides["settings_repo"]
+    from .repositories.settings_repository import get_settings_repo as _get
+    return _get()
+
+
+def get_llm_client() -> "LLMClient | None":
+    """Retorna o LLM client (Ollama/OpenRouter) ou None se não configurado."""
+    if "llm_client" in _overrides:
+        return _overrides["llm_client"]
+    from .ai.llm_client import LLMClient
+    return LLMClient.from_settings()
 
 
 def set_overrides(

@@ -7,9 +7,11 @@ services:
     ports:
       - "80:80"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     networks:
       - dl-torrent
+    restart: unless-stopped
 
   api:
     image: ghcr.io/caiovmv/atum-api:v0.2.0
@@ -29,13 +31,19 @@ services:
       - E:\Library\Music:/library/music
       - E:\Library\Videos:/library/videos
       - api_covers:/app/covers
+    healthcheck:
+      test: [ "CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/indexers/status')\" || exit 1" ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
     depends_on:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     networks:
       - dl-torrent
+    restart: unless-stopped
 
   runner:
     image: ghcr.io/caiovmv/atum-runner:v0.2.0
@@ -57,13 +65,19 @@ services:
       - E:\Library\Music:/library/music
       - E:\Library\Videos:/library/videos
       - api_covers:/app/covers
+    healthcheck:
+      test: [ "CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:9092/downloads')\" || exit 1" ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
     depends_on:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     networks:
       - dl-torrent
+    restart: unless-stopped
 
   postgres:
     image: postgres:18-alpine
@@ -81,13 +95,20 @@ services:
       retries: 5
     networks:
       - dl-torrent
+    restart: unless-stopped
 
   redis:
     image: redis:latest
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - dl-torrent
+    restart: unless-stopped
 
   feed-daemon:
     image: ghcr.io/caiovmv/atum-api:v0.2.0
@@ -102,9 +123,10 @@ services:
       postgres:
         condition: service_healthy
       runner:
-        condition: service_started
+        condition: service_healthy
     networks:
       - dl-torrent
+    restart: unless-stopped
 
   sync-daemon:
     image: ghcr.io/caiovmv/atum-api:v0.2.0
@@ -128,9 +150,10 @@ services:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     networks:
       - dl-torrent
+    restart: unless-stopped
 
   indexers-daemon:
     image: ghcr.io/caiovmv/atum-api:v0.2.0
@@ -143,7 +166,7 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - X1337_BASE_URL=${X1337_BASE_URL:-https://www.1377x.to}
       - TPB_BASE_URL=${TPB_BASE_URL:-https://tpb.party}
-      - YTS_BASE_URL=${YTS_BASE_URL:-https://yts.lt}
+      - YTS_BASE_URL=${YTS_BASE_URL:-https://yts.mx}
       - EZTV_BASE_URL=${EZTV_BASE_URL:-https://eztv.re}
       - NYAA_BASE_URL=${NYAA_BASE_URL:-https://nyaa.si}
       - LIMETORRENTS_BASE_URL=${LIMETORRENTS_BASE_URL:-https://www.limetorrents.lol}
@@ -151,9 +174,53 @@ services:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     networks:
       - dl-torrent
+    restart: unless-stopped
+
+  enrichment-daemon:
+    image: ghcr.io/caiovmv/atum-enrichment:v0.2.0
+    build:
+      context: .
+      dockerfile: Dockerfile.enrichment
+    command: [ "dl-torrent", "enrichment", "daemon", "--interval", "300", "--batch-size", "10" ]
+    environment:
+      - DATABASE_URL=postgresql://dluser:dlpass@postgres:5432/dltorrent
+      - REDIS_URL=redis://redis:6379/0
+      - LIBRARY_MUSIC_PATH=/library/music
+      - LIBRARY_VIDEOS_PATH=/library/videos
+      - TMDB_API_KEY=${TMDB_API_KEY:-}
+      - COVERS_DIR=/app/covers
+    volumes:
+      - E:\Library\Music:/library/music
+      - E:\Library\Videos:/library/videos
+      - api_covers:/app/covers
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "pgrep -f 'enrichment daemon' || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - dl-torrent
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama
+    volumes:
+      - ollama_models:/root/.ollama
+    ports:
+      - "11434:11434"
+    networks:
+      - dl-torrent
+    restart: unless-stopped
+    profiles:
+      - ai
 
   # FlareSolverr: contorna Cloudflare/reCAPTCHA nos scripts de scraping (scripts/scraping/).
   # No .env defina: FLARESOLVERR_URL=http://localhost:8191 (scripts no host) ou http://flaresolverr:8191 (de dentro do Docker).
@@ -176,3 +243,4 @@ volumes:
   postgres_data:
   redis_data:
   api_covers:
+  ollama_models:

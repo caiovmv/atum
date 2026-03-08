@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
-import { IoNotificationsOutline, IoHomeOutline, IoSearch, IoDownloadOutline, IoHeartOutline, IoReaderOutline, IoLibraryOutline, IoRadioOutline } from 'react-icons/io5';
+import { IoNotificationsOutline, IoHomeOutline, IoSearch, IoDownloadOutline, IoHeartOutline, IoReaderOutline, IoLibraryOutline, IoRadioOutline, IoSettingsOutline } from 'react-icons/io5';
+import { useToast } from '../contexts/ToastContext';
 import './Layout.css';
 
 interface Notification {
@@ -19,6 +20,7 @@ export function Layout() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [notifLoading, setNotifLoading] = useState(false);
+  const { showToast } = useToast();
 
   const fetchUnreadCount = useCallback(async () => {
     try {
@@ -33,11 +35,15 @@ export function Layout() {
   }, []);
 
   const notifSseRef = useRef<EventSource | null>(null);
+  const showToastRef = useRef(showToast);
+  showToastRef.current = showToast;
   const [notifReconnecting, setNotifReconnecting] = useState(false);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     fetchUnreadCount();
+    let disposed = false;
     const open = () => {
-      if (notifSseRef.current) return;
+      if (disposed || notifSseRef.current) return;
       const es = new EventSource('/api/notifications/events');
       es.onmessage = (event) => {
         setNotifReconnecting(false);
@@ -48,9 +54,28 @@ export function Layout() {
           // ignore
         }
       };
+      es.addEventListener('new_notification', ((event: MessageEvent) => {
+        setNotifReconnecting(false);
+        try {
+          const data = JSON.parse(event.data);
+          if (typeof data.count === 'number') setUnreadCount(data.count);
+          if (data.notification?.title) {
+            showToastRef.current(data.notification.title, 6000);
+          }
+        } catch {
+          // ignore
+        }
+      }) as EventListener);
       es.onerror = () => {
         setNotifReconnecting(true);
         es.close();
+        notifSseRef.current = null;
+        if (!disposed) {
+          reconnectTimerRef.current = setTimeout(() => {
+            reconnectTimerRef.current = null;
+            if (document.visibilityState === 'visible') open();
+          }, 5000);
+        }
       };
       notifSseRef.current = es;
     };
@@ -58,6 +83,10 @@ export function Layout() {
       if (notifSseRef.current) {
         notifSseRef.current.close();
         notifSseRef.current = null;
+      }
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
       }
     };
     const onVisibility = () => {
@@ -67,6 +96,7 @@ export function Layout() {
     if (document.visibilityState === 'visible') open();
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
+      disposed = true;
       document.removeEventListener('visibilitychange', onVisibility);
       close();
     };
@@ -74,12 +104,17 @@ export function Layout() {
 
   useEffect(() => {
     if (!notifOpen) return;
+    const controller = new AbortController();
     setNotifLoading(true);
-    fetch('/api/notifications?limit=30')
+    fetch('/api/notifications?limit=30', { signal: controller.signal })
       .then((r) => r.ok ? r.json() : [])
       .then((list) => setNotifications(Array.isArray(list) ? list : []))
-      .catch(() => setNotifications([]))
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        setNotifications([]);
+      })
       .finally(() => setNotifLoading(false));
+    return () => controller.abort();
   }, [notifOpen]);
 
   const markRead = async (id: number) => {
@@ -161,6 +196,10 @@ export function Layout() {
           <NavLink to="/radio" className={({ isActive }) => (isActive ? 'atum-nav-item active' : 'atum-nav-item')} onClick={() => setMenuOpen(false)}>
             <IoRadioOutline className="atum-nav-icon" aria-hidden />
             <span>Rádio</span>
+          </NavLink>
+          <NavLink to="/settings" className={({ isActive }) => (isActive ? 'atum-nav-item active' : 'atum-nav-item')} onClick={() => setMenuOpen(false)}>
+            <IoSettingsOutline className="atum-nav-icon" aria-hidden />
+            <span>Configurações</span>
           </NavLink>
         </nav>
       </aside>

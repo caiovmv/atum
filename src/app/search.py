@@ -205,7 +205,9 @@ def get_magnet_1337x(torrent_id: str) -> str | None:
         torrents = get_1337x_client()
         info = torrents.info(torrent_id=torrent_id)
         return getattr(info, "magnet_link", None) or None
-    except Exception:
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).debug("get_magnet_1337x failed for %s: %s", torrent_id, exc)
         return None
 
 
@@ -568,7 +570,7 @@ def search_yts(
         return []
     use_video, allowed = _quality_filter_for_content_type(content_type, format_filter, no_quality_filter)
     s = settings or get_settings()
-    base = (getattr(s, "yts_base_url", "") or "https://yts.lt").strip().rstrip("/")
+    base = (getattr(s, "yts_base_url", "") or "https://yts.mx").strip().rstrip("/")
     import urllib.parse
 
     import requests
@@ -941,116 +943,68 @@ def search_all(
     settings=None,
     sort_by: str = "seeders",
 ) -> list[SearchResult]:
-    """Busca em todos os indexadores solicitados, junta e ordena (por seeders/leechers ou tamanho)."""
+    """Busca em todos os indexadores solicitados em paralelo, junta e ordena."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     if not indexers:
         indexers = list(DEFAULT_INDEXERS)
     indexers = [x.strip().lower() for x in indexers if x.strip()]
     indexers = [x for x in indexers if x in ALL_INDEXERS]
     if not indexers:
         indexers = list(DEFAULT_INDEXERS)
-    all_results: list[SearchResult] = []
-    # Buscar mais para permitir limite alto (cada indexador retorna até fetch_limit*2)
+
     fetch_limit = max(limit, 100)
 
-    if "1337x" in indexers:
-        r1337 = search_1337x(
-            query,
-            limit=fetch_limit * 2,
-            format_filter=format_filter,
-            no_quality_filter=no_quality_filter,
-            verbose=verbose,
-            music_category_only=music_category_only,
-            content_type=content_type,
-        )
-        all_results.extend(r1337)
+    search_fns: dict[str, object] = {
+        "1337x": search_1337x,
+        "tpb": search_tpb,
+        "yts": search_yts,
+        "eztv": search_eztv,
+        "nyaa": search_nyaa,
+        "limetorrents": search_limetorrents,
+        "iptorrents": search_iptorrents,
+    }
 
-    if "tpb" in indexers:
-        rtpb = search_tpb(
-            query,
-            limit=fetch_limit * 2,
-            format_filter=format_filter,
-            no_quality_filter=no_quality_filter,
-            verbose=verbose,
-            music_category_only=music_category_only,
-            content_type=content_type,
-            settings=settings,
-        )
-        all_results.extend(rtpb)
-        if not rtpb and not verbose:
-            typer.echo("  TPB: nenhum resultado (espelho pode estar indisponível; use -V para detalhes).", err=True)
+    common_kwargs = dict(
+        query=query,
+        limit=fetch_limit * 2,
+        format_filter=format_filter,
+        no_quality_filter=no_quality_filter,
+        verbose=verbose,
+        music_category_only=music_category_only,
+        content_type=content_type,
+    )
 
-    if "yts" in indexers:
-        all_results.extend(
-            search_yts(
-                query,
-                limit=fetch_limit * 2,
-                format_filter=format_filter,
-                no_quality_filter=no_quality_filter,
-                verbose=verbose,
-                music_category_only=music_category_only,
-                content_type=content_type,
-                settings=settings,
-            )
-        )
-    if "eztv" in indexers:
-        all_results.extend(
-            search_eztv(
-                query,
-                limit=fetch_limit * 2,
-                format_filter=format_filter,
-                no_quality_filter=no_quality_filter,
-                verbose=verbose,
-                music_category_only=music_category_only,
-                content_type=content_type,
-                settings=settings,
-            )
-        )
-    if "nyaa" in indexers:
-        all_results.extend(
-            search_nyaa(
-                query,
-                limit=fetch_limit * 2,
-                format_filter=format_filter,
-                no_quality_filter=no_quality_filter,
-                verbose=verbose,
-                music_category_only=music_category_only,
-                content_type=content_type,
-                settings=settings,
-            )
-        )
-    if "limetorrents" in indexers:
-        all_results.extend(
-            search_limetorrents(
-                query,
-                limit=fetch_limit * 2,
-                format_filter=format_filter,
-                no_quality_filter=no_quality_filter,
-                verbose=verbose,
-                music_category_only=music_category_only,
-                content_type=content_type,
-                settings=settings,
-            )
-        )
-    if "iptorrents" in indexers:
-        all_results.extend(
-            search_iptorrents(
-                query,
-                limit=fetch_limit * 2,
-                format_filter=format_filter,
-                no_quality_filter=no_quality_filter,
-                verbose=verbose,
-                music_category_only=music_category_only,
-                content_type=content_type,
-                settings=settings,
-            )
-        )
+    all_results: list[SearchResult] = []
+
+    def _run_indexer(name: str) -> tuple[str, list[SearchResult]]:
+        fn = search_fns.get(name)
+        if not fn:
+            return name, []
+        kwargs = {**common_kwargs}
+        if name != "1337x":
+            kwargs["settings"] = settings
+        try:
+            results = fn(**kwargs)  # type: ignore[operator]
+            return name, results if isinstance(results, list) else []
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).debug("Indexer %s failed: %s", name, exc)
+            return name, []
+
+    with ThreadPoolExecutor(max_workers=min(len(indexers), 6)) as pool:
+        futures = {pool.submit(_run_indexer, idx): idx for idx in indexers}
+        for future in as_completed(futures):
+            name, results = future.result()
+            all_results.extend(results)
+            if name == "tpb" and not results and not verbose:
+                typer.echo("  TPB: nenhum resultado (espelho pode estar indisponível; use -V para detalhes).", err=True)
 
     if sort_by == "size":
         all_results.sort(
             key=lambda r: (-_parse_size_to_bytes(r.size), -r.quality.score, -r.seeders)
         )
     else:
-        # seeders (default): ordenar por Se/Le depois qualidade
         all_results.sort(
             key=lambda r: (-r.seeders, -r.leechers, -r.quality.score)
         )

@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from pathlib import Path
 
-import requests
+import httpx
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -24,6 +25,8 @@ from ...db import (
 )
 from ...feeds import poll_feeds_api
 from ...organize import extract_subpath_by_content_type
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/feeds", tags=["feeds"])
 
@@ -117,15 +120,15 @@ def poll_feeds(body: PollBody) -> dict:
     """Verifica feeds e salva novidades em pendentes. Deduplica com base em downloads concluídos."""
     existing_names: list[str] = []
     try:
-        r = requests.get(_runner_url("/downloads"), params={"status": "completed"}, timeout=15)
+        r = httpx.get(_runner_url("/downloads"), params={"status": "completed"}, timeout=15)
         if r.status_code == 200:
             data = r.json()
             for d in data if isinstance(data, list) else []:
                 name = d.get("name") or d.get("title") or ""
                 if name:
                     existing_names.append(name)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Falha ao obter downloads do Runner para dedup: %s", exc)
     result = poll_feeds_api(
         format_filter=body.format_filter,
         include=body.include,
@@ -141,8 +144,8 @@ def poll_feeds(body: PollBody) -> dict:
                 body=None,
                 payload={"saved": saved, "new_count": saved},
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Falha ao criar notificação de feed: %s", exc)
     return result
 
 
@@ -191,7 +194,7 @@ def add_pending_to_downloads(body: AddToDownloadsBody) -> dict:
             save_path = save_path_base
         url = _runner_url("/downloads")
         try:
-            resp = requests.post(
+            resp = httpx.post(
                 url,
                 json={
                     "magnet": link,
@@ -202,7 +205,7 @@ def add_pending_to_downloads(body: AddToDownloadsBody) -> dict:
                 },
                 timeout=30,
             )
-        except requests.RequestException as e:
+        except httpx.HTTPError as e:
             errors.append(f"[{pid}] Runner: {e}")
             continue
         if resp.status_code != 200:

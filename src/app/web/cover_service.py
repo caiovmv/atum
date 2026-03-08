@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from difflib import SequenceMatcher
@@ -10,6 +11,8 @@ from pathlib import Path
 import requests
 
 from ..deps import get_settings
+
+logger = logging.getLogger(__name__)
 from ..metadata_from_name import parse_metadata_from_name
 
 # Número de resultados a buscar antes de ranquear
@@ -63,7 +66,8 @@ def _itunes_search_music(term: str) -> list[dict]:
             return []
         data = r.json()
         return data.get("results") or []
-    except Exception:
+    except Exception as exc:
+        logger.debug("iTunes music search error: %s", exc)
         return []
 
 
@@ -115,11 +119,12 @@ def _tmdb_search_one(query: str, search_type: str, api_key: str, use_year: int |
             return []
         data = r.json()
         return data.get("results") or []
-    except Exception:
+    except Exception as exc:
+        logger.debug("TMDB search error: %s", exc)
         return []
 
 
-def _get_best_tmdb_search_result(title: str, content_type: str, year: int | None = None) -> dict | None:
+def get_best_tmdb_search_result(title: str, content_type: str, year: int | None = None) -> dict | None:
     """Busca no TMDB com ranking; usa query limpa (regex). Se não achar, tenta fallback (nome enxuto)."""
     s = get_settings()
     api_key = (s.tmdb_api_key or "").strip()
@@ -178,7 +183,11 @@ def get_tmdb_detail(tmdb_id: int, content_type: str) -> dict | None:
         if r.status_code != 200:
             return None
         data = r.json()
-    except Exception:
+    except Exception as exc:
+        logger.debug("TMDB detail error: %s", exc)
+        return None
+
+    if not data or not isinstance(data, dict):
         return None
 
     base_img = "https://image.tmdb.org/t/p"
@@ -276,8 +285,8 @@ def get_search_filter_suggestions(content_type: str, query: str) -> dict:
                             for gid in sorted(genre_ids):
                                 if gid in id_to_name and id_to_name[gid] not in genres:
                                     genres.append(id_to_name[gid])
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("TMDB filter suggestions error: %s", exc)
 
     if content_type == "music":
         try:
@@ -301,8 +310,8 @@ def get_search_filter_suggestions(content_type: str, query: str) -> dict:
                         except ValueError:
                             pass
                 years.sort()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("iTunes filter suggestions error: %s", exc)
 
     qualities = ["720p", "1080p", "2160p", "4K", "FLAC", "320", "V0", "V2"]
     out = {"years": years[:20], "genres": genres[:25], "qualities": qualities}
@@ -323,7 +332,7 @@ def get_tmdb_detail_by_title(title: str, content_type: str, year: int | None = N
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
-    best = _get_best_tmdb_search_result(title, content_type, year)
+    best = get_best_tmdb_search_result(title, content_type, year)
     if not best:
         return None
     tmdb_id = best.get("id")
@@ -337,7 +346,7 @@ def get_tmdb_detail_by_title(title: str, content_type: str, year: int | None = N
 
 def get_cover_urls_tmdb(title: str, content_type: str) -> CoverUrls:
     """Busca poster no TMDB (movies ou tv) com ranking. Retorna URLs pequena (w300) e grande (w500)."""
-    best = _get_best_tmdb_search_result(title, content_type)
+    best = get_best_tmdb_search_result(title, content_type)
     if not best:
         return CoverUrls(url_small=None, url_large=None)
     poster_path = best.get("poster_path")
@@ -362,7 +371,8 @@ def _itunes_search_movie_tv(term: str, media: str, entity: str) -> list[dict]:
             return []
         data = r.json()
         return data.get("results") or []
-    except Exception:
+    except Exception as exc:
+        logger.debug("iTunes movie/tv search error: %s", exc)
         return []
 
 
@@ -438,7 +448,7 @@ def _get_cover_urls_movies_tv_best_match(title: str, content_type: str) -> Cover
         urls_itunes = get_cover_urls_itunes_tv(title)
 
     # Score TMDB: reutilizar o melhor resultado para obter um score
-    best_tmdb = _get_best_tmdb_search_result(title, content_type)
+    best_tmdb = get_best_tmdb_search_result(title, content_type)
     title_key = "title" if content_type == "movies" else "name"
     tmdb_name = (best_tmdb.get(title_key) or "").strip() if best_tmdb else ""
     score_tmdb = _text_similarity(query.lower(), tmdb_name.lower()) if tmdb_name else 0.0
@@ -519,7 +529,8 @@ def _download_image(url: str, path: str) -> bool:
                 if chunk:
                     f.write(chunk)
         return True
-    except Exception:
+    except Exception as exc:
+        logger.debug("Image download error for %s: %s", url, exc)
         return False
 
 

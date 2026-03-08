@@ -2,6 +2,14 @@
   padding: 0 0 1rem;
 }
 
+.atum-library-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
 .atum-library-title {
   font-size: 1.5rem;
   margin-bottom: 0.25rem;
@@ -9,7 +17,24 @@
 
 .atum-library-desc {
   color: var(--atum-muted);
-  margin-bottom: 1rem;
+  margin-bottom: 0;
+}
+
+.atum-library-rescan-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+@keyframes atum-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.atum-spin {
+  animation: atum-spin 1s linear infinite;
 }
 
 .atum-library-tabs {

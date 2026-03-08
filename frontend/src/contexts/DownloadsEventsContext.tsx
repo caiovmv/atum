@@ -1,6 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 
-/** Formato de item de download vindo da API (lista). */
 export interface DownloadItem {
   id: number;
   status?: string;
@@ -34,62 +33,82 @@ export function DownloadsEventsProvider({ children }: { children: React.ReactNod
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [reconnecting, setReconnecting] = useState(false);
   const sseRef = useRef<EventSource | null>(null);
-  const errorCountRef = useRef(0);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const refetch = useCallback(() => {
     fetch('/api/downloads')
       .then((r) => (r.ok ? r.json() : []))
       .then((list) => {
+        if (!mountedRef.current) return;
         setDownloads(Array.isArray(list) ? list : []);
         setLastUpdated(new Date());
       })
       .catch(() => {});
   }, []);
 
-  const open = useCallback(() => {
-    if (sseRef.current) return;
-    const es = new EventSource('/api/downloads/events');
-    es.onmessage = (event) => {
-      errorCountRef.current = 0;
-      setReconnecting(false);
-      try {
-        const data = JSON.parse(event.data);
-        setDownloads(Array.isArray(data) ? data : []);
-        setLastUpdated(new Date());
-      } catch {
-        // ignore
+  useEffect(() => {
+    let disposed = false;
+
+    const open = () => {
+      if (disposed || sseRef.current) return;
+      const es = new EventSource('/api/downloads/events');
+      es.onmessage = (event) => {
+        setReconnecting(false);
+        try {
+          const data = JSON.parse(event.data);
+          setDownloads(Array.isArray(data) ? data : []);
+          setLastUpdated(new Date());
+        } catch {
+          // ignore
+        }
+      };
+      es.onerror = () => {
+        setReconnecting(true);
+        es.close();
+        sseRef.current = null;
+        if (!disposed) {
+          reconnectTimerRef.current = setTimeout(() => {
+            reconnectTimerRef.current = null;
+            if (document.visibilityState === 'visible') open();
+          }, 5000);
+        }
+      };
+      sseRef.current = es;
+    };
+
+    const close = () => {
+      if (sseRef.current) {
+        sseRef.current.close();
+        sseRef.current = null;
+      }
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
       }
     };
-    es.onerror = () => {
-      errorCountRef.current += 1;
-      setReconnecting(true);
-      es.close();
-    };
-    sseRef.current = es;
-  }, []);
 
-  const close = useCallback(() => {
-    if (sseRef.current) {
-      sseRef.current.close();
-      sseRef.current = null;
-    }
-  }, []);
-
-  useEffect(() => {
     const onVisibility = () => {
       if (document.visibilityState === 'visible') open();
       else close();
     };
+
     if (document.visibilityState === 'visible') {
       open();
       refetch();
     }
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
+      disposed = true;
       document.removeEventListener('visibilitychange', onVisibility);
       close();
     };
-  }, [open, close, refetch]);
+  }, [refetch]);
 
   return (
     <DownloadsEventsContext.Provider value={{ downloads, lastUpdated, refetch, reconnecting }}>

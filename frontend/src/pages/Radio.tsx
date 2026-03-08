@@ -63,12 +63,16 @@ export function Radio() {
   const navigate = useNavigate();
 
   const selectedSintonia = sintonias.find((s) => s.id === selectedId) ?? null;
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
 
   const fetchSintonias = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch('/api/radio/sintonias');
+      if (!mountedRef.current) return;
       const body = await res.text();
+      if (!mountedRef.current) return;
       if (!res.ok) {
         let detail = body;
         try {
@@ -86,10 +90,11 @@ export function Radio() {
       else if (list.length > 0 && !list.some((s: Sintonia) => s.id === selectedId))
         setSelectedId(list[0].id);
     } catch (err) {
+      if (!mountedRef.current) return;
       setSintonias([]);
       showToast(err instanceof Error ? err.message : 'Não foi possível carregar as sintonias.', 5000);
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   }, [showToast, selectedId]);
 
@@ -101,15 +106,18 @@ export function Radio() {
     setTracksLoading(true);
     try {
       const res = await fetch(`/api/radio/sintonias/${sintoniaId}/queue?limit=100`, { method: 'POST' });
+      if (!mountedRef.current) return;
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
+      if (!mountedRef.current) return;
       const list = data?.tracks ?? [];
       setDisplayTracks(list);
     } catch (err) {
+      if (!mountedRef.current) return;
       setDisplayTracks([]);
       showToast(err instanceof Error ? err.message : 'Não foi possível carregar a fila.', 4000);
     } finally {
-      setTracksLoading(false);
+      if (mountedRef.current) setTracksLoading(false);
     }
   }, [showToast]);
 
@@ -120,7 +128,7 @@ export function Radio() {
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (optionsRef.current && !optionsRef.current.contains(e.target as Node)) setOptionsOpen(false);
+      if (optionsRef.current && !optionsRef.current.contains(e.target as Node)) { setOptionsOpen(false); setConfirmDeleteId(null); }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -230,9 +238,15 @@ export function Radio() {
     }
   };
 
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+
   const deleteSintonia = async (id: number) => {
+    if (confirmDeleteId !== id) {
+      setConfirmDeleteId(id);
+      return;
+    }
+    setConfirmDeleteId(null);
     setOptionsOpen(false);
-    if (!window.confirm('Excluir esta sintonia?')) return;
     try {
       const res = await fetch(`/api/radio/sintonias/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error(await res.text());
@@ -476,7 +490,7 @@ export function Radio() {
                 Editar sintonia
               </button>
               <button type="button" className="atum-radio-options-item atum-radio-options-item-danger" onClick={() => selectedSintonia && deleteSintonia(selectedSintonia.id)}>
-                Excluir
+                {confirmDeleteId === selectedSintonia?.id ? 'Confirmar exclusão?' : 'Excluir'}
               </button>
             </div>
           )}

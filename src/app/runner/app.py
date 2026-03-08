@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -360,8 +361,8 @@ def _content_path_allowed(content_path: str) -> bool:
                 return True
             except ValueError:
                 continue
-    except Exception:
-        pass
+    except Exception as exc:
+        logging.getLogger(__name__).debug("Erro ao verificar content_path '%s': %s", content_path, exc)
     return False
 
 

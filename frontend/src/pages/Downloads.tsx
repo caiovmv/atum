@@ -4,19 +4,8 @@ import { useDownloadsEvents } from '../contexts/DownloadsEventsContext';
 import { useToast } from '../contexts/ToastContext';
 import { CoverImage } from '../components/CoverImage';
 import { EmptyState } from '../components/EmptyState';
+import { formatFileSize, statusLabel } from '../utils/format';
 import './Downloads.css';
-
-const STATUS_LABELS: Record<string, string> = {
-  queued: 'Enfileirado',
-  downloading: 'Baixando',
-  paused: 'Pausado',
-  completed: 'Concluído',
-  failed: 'Falhou',
-};
-
-function statusLabel(status: string): string {
-  return STATUS_LABELS[status] ?? status;
-}
 
 type ContentType = 'music' | 'movies' | 'tv';
 
@@ -79,8 +68,27 @@ export function Downloads() {
   }, [statusFilter, contextRefetch]);
 
   useEffect(() => {
-    fetchDownloads();
-  }, [fetchDownloads]);
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
+    const url = statusFilter ? `/api/downloads?status=${encodeURIComponent(statusFilter)}` : '/api/downloads';
+    fetch(url, { signal: controller.signal })
+      .then((res) => {
+        if (!res.ok) {
+          if (res.status === 503) throw new Error('Runner não configurado. Inicie: dl-torrent runner');
+          return res.text().then((t) => { throw new Error(t); });
+        }
+        contextRefetch();
+      })
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        setError(err instanceof Error ? err.message : 'Erro ao carregar');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [statusFilter, contextRefetch]);
 
   const showToastMessage = (msg: string) => showToast(msg, 4000);
 
@@ -115,20 +123,9 @@ export function Downloads() {
     }
   }
 
-  function formatBytes(n: number | undefined): string {
-    if (n == null || n === 0) return '—';
-    const u = ['B', 'KB', 'MB', 'GB', 'TB'];
-    let i = 0;
-    while (n >= 1024 && i < u.length - 1) {
-      n /= 1024;
-      i++;
-    }
-    return `${n.toFixed(1)} ${u[i]}`;
-  }
-
   function formatSpeed(bps: number | undefined): string {
     if (bps == null || bps <= 0) return '—';
-    return `${formatBytes(bps)}/s`;
+    return `${formatFileSize(bps)}/s`;
   }
 
   function formatEta(seconds: number | undefined): string {
@@ -237,8 +234,8 @@ export function Downloads() {
                       )}
                     </td>
                     <td>{r.num_seeds ?? '—'} / {r.num_leechers != null ? r.num_leechers : (r.num_peers ?? '—')}</td>
-                    <td>{formatBytes(r.total_bytes)}</td>
-                    <td>{formatBytes(r.downloaded_bytes)}</td>
+                    <td>{r.total_bytes != null ? formatFileSize(r.total_bytes) : '—'}</td>
+                    <td>{r.downloaded_bytes != null ? formatFileSize(r.downloaded_bytes) : '—'}</td>
                     <td>{formatSpeed(r.download_speed_bps)}</td>
                     <td>{r.status === 'completed' ? '—' : formatEta(r.eta_seconds)}</td>
                     <td>
@@ -270,10 +267,10 @@ export function Downloads() {
                   <div className="download-card-name">{r.name || '—'}</div>
                   <span className={`status status-${r.status}`}>{statusLabel(r.status)}</span>
                   <div className="download-card-meta">
-                    {progressPercent(r)} · {r.num_seeds ?? '—'}/{r.num_leechers != null ? r.num_leechers : (r.num_peers ?? '—')} · {formatBytes(r.total_bytes)}
+                    {progressPercent(r)} · {r.num_seeds ?? '—'}/{r.num_leechers != null ? r.num_leechers : (r.num_peers ?? '—')} · {r.total_bytes != null ? formatFileSize(r.total_bytes) : '—'}
                   </div>
                   {r.status === 'downloading' && r.progress != null && (
-                    <div className="progress-bar-wrap" role="progressbar" aria-valuenow={r.progress <= 1 ? r.progress * 100 : r.progress} aria-valuemin={0} aria-valuemax={100}>
+                    <div className="progress-bar-wrap" role="progressbar" aria-valuenow={r.progress <= 1 ? r.progress * 100 : r.progress} aria-valuemin={0} aria-valuemax={100} aria-label="Progresso">
                       <div className="progress-bar" style={{ width: `${Math.min(100, r.progress <= 1 ? r.progress * 100 : r.progress)}%` }} />
                     </div>
                   )}

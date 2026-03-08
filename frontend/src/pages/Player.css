@@ -1,7 +1,64 @@
 .atum-player {
   padding: 1rem;
-  max-width: 900px;
+  max-width: 1200px;
   margin: 0 auto;
+}
+
+.atum-player--fullscreen {
+  max-width: none;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: #080808;
+  position: relative;
+}
+
+.atum-receiver-back {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.75rem 0.35rem 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  background:
+    repeating-linear-gradient(91deg, rgba(255,255,255,0.012) 0px, transparent 1px, transparent 5px),
+    repeating-linear-gradient(89deg, rgba(255,255,255,0.016) 0px, transparent 1px, transparent 3px),
+    linear-gradient(155deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 40%, rgba(255,255,255,0.04) 80%, rgba(255,255,255,0.015) 100%),
+    linear-gradient(180deg, #1a1a1a, #111111);
+  color: #00e5c8;
+  font-family: 'Inter', 'Helvetica Neue', Helvetica, system-ui, sans-serif;
+  font-size: 0.65rem;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, opacity 0.3s;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.35);
+  opacity: 0.6;
+}
+
+.atum-receiver-back:hover {
+  border-color: rgba(0, 229, 200, 0.2);
+  opacity: 1;
+  box-shadow:
+    0 0 8px rgba(0, 229, 200, 0.12),
+    0 1px 0 rgba(255, 255, 255, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.35);
+}
+
+.atum-receiver-back svg {
+  flex-shrink: 0;
 }
 
 .atum-player-title {
@@ -254,4 +311,33 @@
 
 .atum-player-next-btn:hover {
   filter: brightness(1.1);
+}
+
+/* ═══ Fullscreen Mobile ═══ */
+
+@media (max-width: 767px) {
+  .atum-player--fullscreen {
+    padding: 0;
+    justify-content: flex-start;
+  }
+  .atum-receiver-back {
+    top: 0.5rem;
+    left: 0.5rem;
+    z-index: 600;
+    padding: 0.3rem 0.6rem 0.3rem 0.4rem;
+    font-size: 0.6rem;
+    opacity: 0.5;
+  }
+  .receiver-layout {
+    width: 100%;
+  }
+}
+
+@media (max-width: 767px) and (orientation: landscape) {
+  .atum-receiver-back {
+    top: 0.3rem;
+    left: 0.3rem;
+    padding: 0.2rem 0.5rem 0.2rem 0.35rem;
+    font-size: 0.55rem;
+  }
 }

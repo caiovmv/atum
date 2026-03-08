@@ -1,4 +1,6 @@
-"""Helper para organizar downloads em subpastas conforme o tipo (Artist/Album, Movie, Show/Season)."""
+"""Helper para organizar downloads em subpastas conforme o tipo (Artist/Album, Movie, Show/Season).
+
+Inclui funções de naming Plex-compatible para gerar paths completos com nomes de arquivo."""
 
 from __future__ import annotations
 
@@ -14,6 +16,146 @@ def _sanitize(name: str, max_len: int = 80) -> str:
     s = re.sub(r'[\\/:*?"<>|]', " ", name)
     s = re.sub(r"\s+", " ", s).strip()
     return s[:max_len] if s else "Unknown"
+
+
+# ---------------------------------------------------------------------------
+# Naming Plex-compatible (paths completos com nome de arquivo)
+# ---------------------------------------------------------------------------
+
+def plex_movie_folder(
+    title: str,
+    year: int | None = None,
+    tmdb_id: int | None = None,
+    imdb_id: str | None = None,
+    include_tmdb: bool = True,
+    include_imdb: bool = False,
+) -> str:
+    """
+    Gera nome de pasta Plex-compatible para filme.
+    Ex: 'Inception (2010) {tmdb-27205}' ou 'Inception (2010) {imdb-tt1375666}'
+    """
+    name = _sanitize(title.strip(), max_len=60) if title else "Unknown"
+    parts = [name]
+    if year:
+        parts = [f"{name} ({year})"]
+    ids = []
+    if include_tmdb and tmdb_id:
+        ids.append(f"{{tmdb-{tmdb_id}}}")
+    if include_imdb and imdb_id:
+        ids.append(f"{{{imdb_id}}}" if imdb_id.startswith("imdb-") else f"{{imdb-{imdb_id}}}")
+    folder = " ".join(parts + ids)
+    return _sanitize(folder, max_len=120)
+
+
+def plex_movie_path(
+    title: str,
+    year: int | None = None,
+    ext: str = ".mkv",
+    tmdb_id: int | None = None,
+    imdb_id: str | None = None,
+    include_tmdb: bool = True,
+    include_imdb: bool = False,
+) -> str:
+    """
+    Gera path Plex-compatible completo para filme (pasta + arquivo).
+    Ex: 'Inception (2010) {tmdb-27205}/Inception (2010).mkv'
+    """
+    folder = plex_movie_folder(title, year, tmdb_id, imdb_id, include_tmdb, include_imdb)
+    name = _sanitize(title.strip(), max_len=60) if title else "Unknown"
+    filename = f"{name} ({year}){ext}" if year else f"{name}{ext}"
+    return f"{folder}/{_sanitize(filename, max_len=100)}"
+
+
+def plex_tv_folder(
+    show: str,
+    year: int | None = None,
+    tmdb_id: int | None = None,
+    imdb_id: str | None = None,
+    include_tmdb: bool = True,
+    include_imdb: bool = False,
+) -> str:
+    """
+    Gera nome de pasta raiz Plex-compatible para série.
+    Ex: 'Breaking Bad {tmdb-1396}'
+    """
+    name = _sanitize(show.strip(), max_len=60) if show else "Unknown"
+    ids = []
+    if include_tmdb and tmdb_id:
+        ids.append(f"{{tmdb-{tmdb_id}}}")
+    if include_imdb and imdb_id:
+        ids.append(f"{{{imdb_id}}}" if imdb_id.startswith("imdb-") else f"{{imdb-{imdb_id}}}")
+    folder = " ".join([name] + ids)
+    return _sanitize(folder, max_len=120)
+
+
+def plex_tv_path(
+    show: str,
+    season: int,
+    episode: int,
+    episode_title: str | None = None,
+    year: int | None = None,
+    ext: str = ".mkv",
+    tmdb_id: int | None = None,
+    imdb_id: str | None = None,
+    include_tmdb: bool = True,
+    include_imdb: bool = False,
+) -> str:
+    """
+    Gera path Plex-compatible completo para episódio de série.
+    Ex: 'Breaking Bad {tmdb-1396}/Season 01/Breaking Bad - s01e01 - Pilot.mkv'
+    """
+    show_folder = plex_tv_folder(show, year, tmdb_id, imdb_id, include_tmdb, include_imdb)
+    season_folder = f"Season {str(season).zfill(2)}"
+    show_name = _sanitize(show.strip(), max_len=50) if show else "Unknown"
+    ep_part = f"s{str(season).zfill(2)}e{str(episode).zfill(2)}"
+    if episode_title:
+        filename = f"{show_name} - {ep_part} - {_sanitize(episode_title, max_len=40)}{ext}"
+    else:
+        filename = f"{show_name} - {ep_part}{ext}"
+    return f"{show_folder}/{season_folder}/{_sanitize(filename, max_len=120)}"
+
+
+def plex_music_path(
+    artist: str,
+    album: str,
+    year: int | None = None,
+    track_number: int | None = None,
+    track_title: str | None = None,
+    ext: str = ".flac",
+    disc_number: int | None = None,
+    disc_total: int | None = None,
+) -> str:
+    """
+    Gera path Plex-compatible completo para faixa de música.
+    Ex: 'Pink Floyd/The Wall (1979)/01 - In the Flesh.flac'
+    Multi-disco: 'Eric Clapton/Forever Man (2015)/d01 - 01 - Badge (Live).flac'
+    """
+    artist_name = _sanitize(artist.strip(), max_len=60) if artist and artist.strip() else "Unknown Artist"
+    album_name = _sanitize(album.strip(), max_len=60) if album and album.strip() else "Unknown Album"
+
+    if artist_name == "Unknown Artist" and album_name == "Unknown Album" and track_title:
+        album_name = _sanitize(track_title.strip(), max_len=60)
+
+    album_folder = f"{album_name} ({year})" if year else album_name
+
+    use_disc_prefix = disc_number is not None and (
+        (disc_total is not None and disc_total > 1)
+        or (disc_number > 1)
+    )
+
+    if track_number and track_title:
+        track_part = f"{str(track_number).zfill(2)} - {_sanitize(track_title, max_len=60)}{ext}"
+    elif track_title:
+        track_part = f"{_sanitize(track_title, max_len=60)}{ext}"
+    else:
+        track_part = f"track{ext}"
+
+    if use_disc_prefix:
+        filename = f"d{str(disc_number).zfill(2)} - {track_part}"
+    else:
+        filename = track_part
+
+    return f"{artist_name}/{album_folder}/{filename}"
 
 
 def extract_movie_subpath(title: str) -> str:
@@ -92,7 +234,7 @@ def extract_artist_album_subpath(title: str) -> str:
         return "Unknown"
     t = title.strip()
     # Separadores comuns: " - ", " – ", " — "
-    for sep in [" - ", " – ", " — ", " – ", " — "]:
+    for sep in [" - ", " – ", " — "]:
         if sep in t:
             parts = t.split(sep, 1)
             artist = _sanitize(parts[0].strip()) if parts else ""

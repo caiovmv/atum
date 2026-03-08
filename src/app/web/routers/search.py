@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Literal
 
-import requests
+import httpx
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
@@ -26,27 +27,12 @@ from ..cover_service import get_tmdb_detail_by_title
 router = APIRouter()
 
 
-@router.get("/search")
-def search(
-    q: str = Query(..., min_length=1),
-    limit: int = Query(1000, ge=1, le=1000),
-    sort_by: Literal["seeders", "size"] = Query("seeders"),
-    content_type: Literal["music", "movies", "tv"] = Query("music"),
-    format_filter: str | None = Query(None),
-    no_quality_filter: bool = Query(False),
-    music_category_only: bool = Query(True),
-    indexers: str | None = Query(None, description="Indexadores separados por vírgula (padrão: todos)."),
+def _run_search(
+    q: str, limit: int, format_filter: str | None, no_quality_filter: bool,
+    music_category_only: bool, content_type: str, indexer_list: list[str],
+    sort_by: str,
 ) -> list[dict]:
-    """Busca torrents. Retorna lista com metadados parseados (parsed_year, etc.)."""
-    s = get_settings()
-    if indexers and indexers.strip():
-        indexer_list = [x.strip().lower() for x in indexers.split(",") if x.strip()]
-        indexer_list = [x for x in indexer_list if x in ALL_INDEXERS]
-    else:
-        enabled = get_enabled_indexers(s.redis_url or None)
-        indexer_list = [x for x in enabled if x in DEFAULT_INDEXERS]
-    if not indexer_list:
-        indexer_list = list(DEFAULT_INDEXERS)
+    """Executa busca + enriquecimento de metadados (sync, roda em thread)."""
     results = search_all(
         query=q,
         limit=limit,
@@ -75,6 +61,33 @@ def search(
     return out
 
 
+@router.get("/search")
+async def search(
+    q: str = Query(..., min_length=1),
+    limit: int = Query(1000, ge=1, le=1000),
+    sort_by: Literal["seeders", "size"] = Query("seeders"),
+    content_type: Literal["music", "movies", "tv"] = Query("music"),
+    format_filter: str | None = Query(None),
+    no_quality_filter: bool = Query(False),
+    music_category_only: bool = Query(True),
+    indexers: str | None = Query(None, description="Indexadores separados por vírgula (padrão: todos)."),
+) -> list[dict]:
+    """Busca torrents. Retorna lista com metadados parseados (parsed_year, etc.)."""
+    s = get_settings()
+    if indexers and indexers.strip():
+        indexer_list = [x.strip().lower() for x in indexers.split(",") if x.strip()]
+        indexer_list = [x for x in indexer_list if x in ALL_INDEXERS]
+    else:
+        enabled = get_enabled_indexers(s.redis_url or None)
+        indexer_list = [x for x in enabled if x in DEFAULT_INDEXERS]
+    if not indexer_list:
+        indexer_list = list(DEFAULT_INDEXERS)
+    return await asyncio.to_thread(
+        _run_search, q, limit, format_filter, no_quality_filter,
+        music_category_only, content_type, indexer_list, sort_by,
+    )
+
+
 class ResolveMagnetBody(BaseModel):
     """Corpo para resolver magnet de um resultado (ex.: 1337x que não traz magnet na listagem)."""
     indexer: str
@@ -82,8 +95,8 @@ class ResolveMagnetBody(BaseModel):
 
 
 @router.post("/search/resolve-magnet")
-def resolve_magnet(body: ResolveMagnetBody) -> dict:
-    """Resolve o magnet para um resultado quando não veio na busca (ex.: 1337x). Permite ao frontend obter o link ao clicar no card."""
+async def resolve_magnet(body: ResolveMagnetBody) -> dict:
+    """Resolve o magnet para um resultado quando não veio na busca (ex.: 1337x)."""
     indexer = (body.indexer or "").strip().lower()
     torrent_id = (body.torrent_id or "").strip()
     if not indexer or indexer not in ALL_INDEXERS or not torrent_id:
@@ -98,27 +111,27 @@ def resolve_magnet(body: ResolveMagnetBody) -> dict:
         magnet=None,
         torrent_url=None,
     )
-    magnet = get_magnet_for_result(fake)
+    magnet = await asyncio.to_thread(get_magnet_for_result, fake)
     return {"magnet": magnet}
 
 
 @router.get("/search-filter-suggestions")
-def search_filter_suggestions(
+async def search_filter_suggestions(
     q: str = Query("", description="Texto da busca para sugerir filtros (TMDB/iTunes)."),
     content_type: Literal["music", "movies", "tv"] = Query("music"),
 ) -> dict:
     """Sugestões de filtros (anos, gêneros, qualidades) a partir de TMDB ou iTunes."""
-    return get_search_filter_suggestions(content_type, q or "")
+    return await asyncio.to_thread(get_search_filter_suggestions, content_type, q or "")
 
 
 @router.get("/tmdb-detail")
-def tmdb_detail(
+async def tmdb_detail(
     title: str = Query(..., min_length=1),
     content_type: Literal["movies", "tv"] = Query(...),
     year: int | None = Query(None),
 ) -> dict:
     """Detalhes TMDB (overview, gêneros, runtime, poster, etc.) para filme ou série."""
-    detail = get_tmdb_detail_by_title(title, content_type, year)
+    detail = await asyncio.to_thread(get_tmdb_detail_by_title, title, content_type, year)
     if not detail:
         raise HTTPException(status_code=404, detail="Nenhum resultado TMDB encontrado.")
     return detail
@@ -150,7 +163,7 @@ def _runner_url(path: str) -> str:
 
 
 @router.post("/add-from-search")
-def add_from_search(body: AddFromSearchBody) -> dict:
+async def add_from_search(body: AddFromSearchBody) -> dict:
     """Reexecuta a busca, resolve magnets dos índices e envia ao Runner."""
     full_query = f"{body.query} {body.album or ''}".strip()
     s = get_settings()
@@ -162,7 +175,8 @@ def add_from_search(body: AddFromSearchBody) -> dict:
         indexer_list = [x.strip().lower() for x in indexer_list if x and x.strip() and x.strip().lower() in ALL_INDEXERS]
         if not indexer_list:
             indexer_list = list(DEFAULT_INDEXERS)
-    results = search_all(
+    results = await asyncio.to_thread(
+        search_all,
         query=full_query,
         limit=body.limit,
         format_filter=body.format_filter,
@@ -182,33 +196,33 @@ def add_from_search(body: AddFromSearchBody) -> dict:
     )
     added: list[int] = []
     errors: list[str] = []
-    for i in body.indices:
-        if i < 0 or i >= len(results):
-            errors.append(f"Índice {i} fora do intervalo.")
-            continue
-        result = results[i]
-        magnet = get_magnet_for_result(result)
-        if not magnet:
-            errors.append(f"Sem magnet: {result.title[:50]}…")
-            continue
-        url = _runner_url("/downloads")
-        try:
-            resp = requests.post(
-                url,
-                json={
-                    "magnet": magnet,
-                    "save_path": save_path,
-                    "name": result.title,
-                    "content_type": body.content_type,
-                    "start_now": body.start_now,
-                },
-                timeout=30,
-            )
-        except requests.RequestException as e:
-            raise HTTPException(status_code=502, detail=f"Runner: {e}") from e
-        if resp.status_code != 200:
-            errors.append(resp.text or f"HTTP {resp.status_code}")
-            continue
-        data = resp.json()
-        added.append(data.get("id", 0))
+    async with httpx.AsyncClient(timeout=30) as client:
+        for i in body.indices:
+            if i < 0 or i >= len(results):
+                errors.append(f"Índice {i} fora do intervalo.")
+                continue
+            result = results[i]
+            magnet = get_magnet_for_result(result)
+            if not magnet:
+                errors.append(f"Sem magnet: {result.title[:50]}…")
+                continue
+            url = _runner_url("/downloads")
+            try:
+                resp = await client.post(
+                    url,
+                    json={
+                        "magnet": magnet,
+                        "save_path": save_path,
+                        "name": result.title,
+                        "content_type": body.content_type,
+                        "start_now": body.start_now,
+                    },
+                )
+            except httpx.HTTPError as e:
+                raise HTTPException(status_code=502, detail=f"Runner: {e}") from e
+            if resp.status_code != 200:
+                errors.append(resp.text or f"HTTP {resp.status_code}")
+                continue
+            data = resp.json()
+            added.append(data.get("id", 0))
     return {"added": added, "errors": errors, "ok": len(added), "fail": len(errors)}

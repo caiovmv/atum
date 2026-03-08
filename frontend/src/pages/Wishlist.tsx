@@ -38,22 +38,45 @@ export function Wishlist() {
   }, []);
 
   useEffect(() => {
-    fetchTerms();
-  }, [fetchTerms]);
+    const controller = new AbortController();
+    setLoading(true);
+    fetch('/api/wishlist', { signal: controller.signal })
+      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
+      .then((data) => setTerms(Array.isArray(data) ? data : []))
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        setTerms([]);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, []);
 
   const wishlistSseRef = useRef<EventSource | null>(null);
   const [wishlistReconnecting, setWishlistReconnecting] = useState(false);
+  const wishlistReconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fetchTermsRef = useRef(fetchTerms);
+  fetchTermsRef.current = fetchTerms;
   useEffect(() => {
+    let disposed = false;
     const open = () => {
-      if (wishlistSseRef.current) return;
+      if (disposed || wishlistSseRef.current) return;
       const es = new EventSource('/api/wishlist/events');
       es.onmessage = () => {
         setWishlistReconnecting(false);
-        fetchTerms();
+        fetchTermsRef.current();
       };
       es.onerror = () => {
         setWishlistReconnecting(true);
         es.close();
+        wishlistSseRef.current = null;
+        if (!disposed) {
+          wishlistReconnectRef.current = setTimeout(() => {
+            wishlistReconnectRef.current = null;
+            if (document.visibilityState === 'visible') open();
+          }, 5000);
+        }
       };
       wishlistSseRef.current = es;
     };
@@ -61,6 +84,10 @@ export function Wishlist() {
       if (wishlistSseRef.current) {
         wishlistSseRef.current.close();
         wishlistSseRef.current = null;
+      }
+      if (wishlistReconnectRef.current) {
+        clearTimeout(wishlistReconnectRef.current);
+        wishlistReconnectRef.current = null;
       }
     };
     const onVisibility = () => {
@@ -70,10 +97,11 @@ export function Wishlist() {
     if (document.visibilityState === 'visible') open();
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
+      disposed = true;
       document.removeEventListener('visibilitychange', onVisibility);
       close();
     };
-  }, [fetchTerms]);
+  }, []);
 
   const showToastMessage = (msg: string) => showToast(msg, 4000);
 

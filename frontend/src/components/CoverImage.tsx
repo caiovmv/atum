@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, memo } from 'react';
 import './CoverImage.css';
 
 type ContentType = 'music' | 'movies' | 'tv';
@@ -8,13 +8,11 @@ interface CoverImageProps {
   title: string;
   size?: 'card' | 'thumb';
   alt?: string;
-  /** Quando informado (ex.: lista de downloads), usa cache e preenche cache na primeira requisição */
   downloadId?: number;
-  /** ID do item importado (library_imports) para capa em disco */
   importId?: number;
 }
 
-export function CoverImage({ contentType, title, size = 'card', alt = '', downloadId, importId }: CoverImageProps) {
+export const CoverImage = memo(function CoverImage({ contentType, title, size = 'card', alt = '', downloadId, importId }: CoverImageProps) {
   const [url, setUrl] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -54,4 +52,4 @@ export function CoverImage({ contentType, title, size = 'card', alt = '', downlo
       {!loaded ? <span className="cover-image-dots">…</span> : null}
     </div>
   );
-}
+});

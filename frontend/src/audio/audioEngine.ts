@@ -20,6 +20,7 @@ export interface AudioEngine {
   loudnessLow: BiquadFilterNode;
   loudnessHigh: BiquadFilterNode;
   panner: StereoPannerNode;
+  dispose(): void;
 }
 
 const ENGINE_KEY = '__receiverEngine';
@@ -106,6 +107,23 @@ export function createAudioEngine(audioElement: HTMLAudioElement): AudioEngine {
   const engine: AudioEngine = {
     ctx, analyser, analyserL, analyserR,
     attGain, volumeGain, eqBands, loudnessLow, loudnessHigh, panner,
+    dispose() {
+      try {
+        source.disconnect();
+        attGain.disconnect();
+        volumeGain.disconnect();
+        for (const band of eqBands) band.disconnect();
+        loudnessLow.disconnect();
+        loudnessHigh.disconnect();
+        panner.disconnect();
+        analyser.disconnect();
+        splitter.disconnect();
+        analyserL.disconnect();
+        analyserR.disconnect();
+        ctx.close();
+      } catch { /* already closed */ }
+      delete (audioElement as unknown as Record<string, unknown>)[ENGINE_KEY];
+    },
   };
   (audioElement as unknown as Record<string, unknown>)[ENGINE_KEY] = engine;
 

@@ -13,6 +13,7 @@ DOWNLOAD_COLUMNS = (
     ", cover_path_small, cover_path_large"
     ", year, video_quality_label, audio_codec, music_quality"
     ", excluded_file_indices, torrent_files"
+    ", tmdb_id, imdb_id, library_path, post_processed, previous_content_path"
 )
 
 
@@ -199,6 +200,49 @@ class PostgresDownloadRepository:
                         f"UPDATE downloads SET {', '.join(updates)} WHERE id = %s",
                         args,
                     )
+            conn.commit()
+
+    def update_enrichment(
+        self,
+        download_id: int,
+        *,
+        tmdb_id: int | None = None,
+        imdb_id: str | None = None,
+        library_path: str | None = None,
+        post_processed: bool | None = None,
+        content_type: str | None = None,
+        previous_content_path: str | None = None,
+    ) -> None:
+        """Atualiza colunas de enriquecimento (TMDB/IMDB, library_path, post_processed)."""
+        updates = ["updated_at = CURRENT_TIMESTAMP"]
+        args: list = []
+        if tmdb_id is not None:
+            updates.append("tmdb_id = %s")
+            args.append(tmdb_id)
+        if imdb_id is not None:
+            updates.append("imdb_id = %s")
+            args.append(imdb_id)
+        if library_path is not None:
+            updates.append("library_path = %s")
+            args.append(library_path)
+        if post_processed is not None:
+            updates.append("post_processed = %s")
+            args.append(post_processed)
+        if content_type is not None:
+            updates.append("content_type = %s")
+            args.append(content_type)
+        if previous_content_path is not None:
+            updates.append("previous_content_path = %s")
+            args.append(previous_content_path)
+        if len(args) == 0:
+            return
+        args.append(download_id)
+        with connection_postgres(self._database_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"UPDATE downloads SET {', '.join(updates)} WHERE id = %s",
+                    args,
+                )
             conn.commit()
 
     def delete(self, download_id: int) -> bool:

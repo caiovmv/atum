@@ -11,6 +11,7 @@ import { Player } from './pages/Player';
 import { ReceiverPlayer } from './pages/ReceiverPlayer';
 import { Radio } from './pages/Radio';
 import { Search } from './pages/Search';
+import { Settings } from './pages/Settings';
 import { Wishlist } from './pages/Wishlist';
 
 function App() {
@@ -19,6 +20,7 @@ function App() {
       <DownloadsEventsProvider>
         <ToastProvider>
       <Routes>
+        <Route path="/play-receiver/:id" element={<ReceiverPlayer />} />
         <Route path="/" element={<Layout />}>
           <Route index element={<Home />} />
           <Route path="search" element={<Search />} />
@@ -28,8 +30,8 @@ function App() {
           <Route path="feeds" element={<Feeds />} />
           <Route path="library" element={<Library />} />
           <Route path="radio" element={<Radio />} />
+          <Route path="settings" element={<Settings />} />
           <Route path="play/:id" element={<Player />} />
-          <Route path="play-receiver/:id" element={<ReceiverPlayer />} />
         </Route>
       </Routes>
         </ToastProvider>

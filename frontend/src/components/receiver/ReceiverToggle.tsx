@@ -7,14 +7,17 @@ interface ReceiverToggleProps {
 
 export function ReceiverToggle({ active, onToggle, label, className = '' }: ReceiverToggleProps) {
   return (
-    <button
-      type="button"
-      className={`receiver-toggle ${active ? 'receiver-toggle-on' : ''} ${className}`.trim()}
-      onClick={onToggle}
-      aria-pressed={active}
-    >
-      <span className="receiver-toggle-indicator" />
+    <div className={`receiver-toggle-wrap ${className}`.trim()}>
       <span className="receiver-toggle-label">{label}</span>
-    </button>
+      <button
+        type="button"
+        className={`receiver-toggle ${active ? 'receiver-toggle-on' : ''}`}
+        onClick={onToggle}
+        aria-pressed={active}
+        aria-label={label}
+      >
+        <span className="receiver-toggle-indicator" />
+      </button>
+    </div>
   );
 }

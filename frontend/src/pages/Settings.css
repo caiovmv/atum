@@ -1,0 +1,263 @@
+.atum-settings {
+  padding: 0 0 2rem;
+  max-width: 800px;
+}
+
+.atum-settings-title {
+  font-size: 1.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.atum-settings-desc {
+  color: var(--atum-muted);
+  margin-bottom: 1.5rem;
+}
+
+.atum-settings-section {
+  background: var(--atum-card);
+  border: 1px solid var(--atum-border);
+  border-radius: 12px;
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.atum-settings-section-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--atum-border);
+}
+
+.atum-settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.atum-settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.atum-settings-field-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.atum-settings-field-row input {
+  flex: 1;
+}
+
+.atum-settings-label {
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.atum-settings-hint {
+  font-size: 0.78rem;
+  color: var(--atum-muted);
+}
+
+.atum-settings-input {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--atum-border);
+  border-radius: 6px;
+  background: var(--atum-bg);
+  color: var(--atum-text);
+  font-size: 0.9rem;
+}
+
+.atum-settings-input:focus {
+  outline: 2px solid var(--atum-accent);
+  outline-offset: 1px;
+}
+
+.atum-settings-select {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--atum-border);
+  border-radius: 6px;
+  background: var(--atum-bg);
+  color: var(--atum-text);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.atum-settings-toggle-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.atum-settings-toggle-info {
+  flex: 1;
+}
+
+.atum-settings-toggle {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.atum-settings-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.atum-settings-toggle-track {
+  position: absolute;
+  inset: 0;
+  background: var(--atum-border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.atum-settings-toggle input:checked + .atum-settings-toggle-track {
+  background: var(--atum-accent);
+}
+
+.atum-settings-toggle-track::after {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  left: 3px;
+  top: 3px;
+  background: var(--atum-card);
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+
+.atum-settings-toggle input:checked + .atum-settings-toggle-track::after {
+  transform: translateX(20px);
+}
+
+.atum-settings-toggle input:focus-visible + .atum-settings-toggle-track {
+  outline: 2px solid var(--atum-accent);
+  outline-offset: 2px;
+}
+
+.atum-settings-integration {
+  background: var(--atum-bg);
+  border: 1px solid var(--atum-border);
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.atum-settings-integration-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.atum-settings-integration-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.atum-settings-integration-status {
+  font-size: 0.8rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+}
+
+.atum-settings-integration-status--ok {
+  background: rgba(76, 175, 80, 0.15);
+  color: #4caf50;
+}
+
+.atum-settings-integration-status--error {
+  background: rgba(244, 67, 54, 0.15);
+  color: #f44336;
+}
+
+.atum-settings-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: 1.5rem;
+}
+
+.atum-settings-test-result {
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+}
+
+.atum-settings-test-result--ok {
+  background: rgba(76, 175, 80, 0.1);
+  color: #4caf50;
+}
+
+.atum-settings-test-result--error {
+  background: rgba(244, 67, 54, 0.1);
+  color: #f44336;
+}
+
+.atum-settings-enrichment-stats {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.6rem 0.75rem;
+  background: var(--atum-bg);
+  border: 1px solid var(--atum-border);
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+.atum-settings-enrichment-stat {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.atum-settings-enrichment-stat strong {
+  font-weight: 600;
+}
+
+.atum-settings-enrichment-stat--pending strong {
+  color: #ffa726;
+}
+
+.atum-settings-enrichment-stat--error strong {
+  color: #f44336;
+}
+
+.atum-settings-notice {
+  font-size: 0.82rem;
+  color: var(--atum-muted);
+  background: rgba(255, 193, 7, 0.08);
+  border: 1px solid rgba(255, 193, 7, 0.25);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  line-height: 1.5;
+}
+
+.atum-settings-notice code {
+  background: var(--atum-bg);
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-family: monospace;
+}
+
+.atum-settings-saved {
+  font-size: 0.85rem;
+  color: #4caf50;
+  animation: atum-settings-fade 2s ease-out forwards;
+}
+
+@keyframes atum-settings-fade {
+  0% { opacity: 1; }
+  70% { opacity: 1; }
+  100% { opacity: 0; }
+}

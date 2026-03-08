@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useToast } from '../contexts/ToastContext';
 import './Detail.css';
 
 interface SearchResult {
@@ -54,6 +55,7 @@ function indexerLabel(indexer: string): string {
 export function Detail() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const state = location.state as DetailState | null;
 
   const [tmdb, setTmdb] = useState<TmdbDetail | null>(null);
@@ -69,20 +71,25 @@ export function Detail() {
       setTmdbLoading(false);
       return;
     }
+    const controller = new AbortController();
     setTmdbLoading(true);
     setTmdbError(null);
     const params = new URLSearchParams({
       title: result.title,
       content_type: contentType,
     });
-    fetch(`/api/tmdb-detail?${params}`)
+    fetch(`/api/tmdb-detail?${params}`, { signal: controller.signal })
       .then((r) => {
         if (!r.ok) throw new Error(r.status === 404 ? 'Não encontrado no TMDB' : r.statusText);
         return r.json();
       })
       .then((data) => setTmdb(data))
-      .catch((err) => setTmdbError(err instanceof Error ? err.message : 'Erro'))
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        setTmdbError(err instanceof Error ? err.message : 'Erro');
+      })
       .finally(() => setTmdbLoading(false));
+    return () => controller.abort();
   }, [state?.result?.title, state?.searchParams?.content_type]);
 
   const handleAddToDownloads = async () => {
@@ -105,18 +112,18 @@ export function Detail() {
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
       if (data.errors?.length) {
-        alert('Falha: ' + data.errors.join('; '));
+        showToast('Falha: ' + data.errors.join('; '), 6000);
       } else if (data.added?.length) {
         navigate('/downloads');
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Erro ao adicionar');
+      showToast(err instanceof Error ? err.message : 'Erro ao adicionar', 4000);
     } finally {
       setAdding(false);
     }
   };
 
-  const NavBlock = () => (
+  const navBlock = (
     <nav className="detail-nav">
       <button type="button" className="detail-nav-btn back" onClick={() => navigate(-1)} aria-label="Voltar">
         ← Voltar
@@ -149,7 +156,7 @@ export function Detail() {
   return (
     <div className="atum-page detail-page">
       <header className="detail-header">
-        <NavBlock />
+        {navBlock}
       </header>
 
       <main className="detail-main">
@@ -211,7 +218,7 @@ export function Detail() {
       </main>
 
       <footer className="detail-footer">
-        <NavBlock />
+        {navBlock}
       </footer>
     </div>
   );

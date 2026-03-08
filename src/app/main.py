@@ -1,13 +1,15 @@
 """CLI principal: subcomandos search e feed."""
 
 import http.server
+import logging
 import re
-import sys
 import webbrowser
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import typer
+
+logger = logging.getLogger(__name__)
 
 from . import __version__
 
@@ -1009,8 +1011,8 @@ def indexers_daemon_cmd(
                                     f"O indexador {name} não está respondendo à busca. Foi desativado até voltar.",
                                     {"indexer": name},
                                 )
-                            except Exception:
-                                pass
+                            except Exception as exc:
+                                logger.debug("Falha ao criar notificação indexer_down para %s: %s", name, exc)
                             typer.echo(f"  [indexers] {name}: falha (desativado)")
                         elif not was_ok and ok:
                             try:
@@ -1020,8 +1022,8 @@ def indexers_daemon_cmd(
                                     f"O indexador {name} está respondendo à busca novamente e foi reativado.",
                                     {"indexer": name},
                                 )
-                            except Exception:
-                                pass
+                            except Exception as exc:
+                                logger.debug("Falha ao criar notificação indexer_up para %s: %s", name, exc)
                             typer.echo(f"  [indexers] {name}: ok (reativado)")
                         elif verbose:
                             typer.echo(f"  [indexers] {name}: {'ok' if ok else 'fail'}")
@@ -1036,6 +1038,197 @@ def indexers_daemon_cmd(
     except KeyboardInterrupt:
         typer.echo("\nEncerrando.")
         raise typer.Exit(0)
+
+
+enrichment_app = typer.Typer(help="Daemon de enriquecimento de metadados (MusicBrainz, Last.fm, Spotify, TMDB, LLM).")
+app.add_typer(enrichment_app, name="enrichment")
+
+
+@enrichment_app.command("daemon")
+def enrichment_daemon_cmd(
+    interval: int = typer.Option(300, "--interval", "-i", help="Intervalo em segundos entre cada ciclo."),
+    batch_size: int = typer.Option(10, "--batch-size", "-b", help="Itens por ciclo."),
+    verbose: bool = typer.Option(True, "--verbose/--no-verbose", "-v", help="Logs verbosos."),
+) -> None:
+    """Loop de enriquecimento: processa itens de library_imports sem enriched_at. Ctrl+C para sair."""
+    import logging
+    import signal
+    import time
+    import traceback
+
+    if verbose:
+        logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+    _shutdown = False
+
+    def _handle_sigterm(signum, frame):
+        nonlocal _shutdown
+        _shutdown = True
+        typer.echo("\nSIGTERM recebido, encerrando após o ciclo atual...")
+
+    signal.signal(signal.SIGTERM, _handle_sigterm)
+
+    typer.echo(f"Enrichment daemon: ciclo a cada {interval}s, batch={batch_size}. Ctrl+C para sair.")
+    try:
+        while not _shutdown:
+            try:
+                from .ai.enrichment_daemon import run_enrichment_cycle, _get_settings_value
+
+                eff_batch = int(_get_settings_value("enrichment_batch_size", batch_size) or batch_size)
+                eff_interval = int(_get_settings_value("enrichment_interval", interval) or interval)
+                n = run_enrichment_cycle(batch_size=eff_batch)
+                if n > 0:
+                    typer.echo(f"  [enrichment] {n} itens enriquecidos.")
+                elif verbose:
+                    typer.echo("  [enrichment] Nenhum item pendente.")
+            except KeyboardInterrupt:
+                raise
+            except Exception as e:
+                typer.echo(f"Erro no enrichment: {e}")
+                if verbose:
+                    typer.echo(traceback.format_exc())
+                eff_interval = interval
+            if _shutdown:
+                break
+            try:
+                time.sleep(eff_interval)
+            except KeyboardInterrupt:
+                raise
+    except KeyboardInterrupt:
+        pass
+    typer.echo("\nEncerrando.")
+    raise typer.Exit(0)
+
+
+@enrichment_app.command("run")
+def enrichment_run_cmd(
+    batch_size: int = typer.Option(50, "--batch-size", "-b", help="Itens para processar."),
+) -> None:
+    """Executa um único ciclo de enriquecimento (sem loop)."""
+    import logging
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+    from .ai.enrichment_daemon import run_enrichment_cycle
+
+    n = run_enrichment_cycle(batch_size=batch_size)
+    typer.echo(f"Enriquecidos: {n} itens.")
+
+
+@enrichment_app.command("reset")
+def enrichment_reset_cmd() -> None:
+    """Reseta enriched_at de todos os itens para forçar re-enriquecimento."""
+    from .deps import get_library_import_repo
+
+    repo = get_library_import_repo()
+    if not repo:
+        typer.echo("Repositório não disponível (DATABASE_URL?).")
+        raise typer.Exit(1)
+
+    from .db_postgres import connection_postgres
+    from .config import get_settings
+    db_url = get_settings().database_url
+    if not db_url:
+        typer.echo("DATABASE_URL não configurado.")
+        raise typer.Exit(1)
+
+    with connection_postgres(db_url) as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE library_imports SET enriched_at = NULL, enrichment_error = NULL")
+            count = cur.rowcount
+            conn.commit()
+    typer.echo(f"Reset: {count} itens marcados para re-enriquecimento.")
+
+
+@app.command()
+def library_reorganize(
+    dry_run: bool = typer.Option(False, "--dry-run", help="Mostrar o que seria feito sem mover nada."),
+    content_type: str | None = typer.Option(None, "--content-type", "-t", help="Filtrar por tipo: music, movies, tv."),
+) -> None:
+    """Reorganiza a biblioteca existente seguindo o padrão Plex-compatible. Não deleta arquivos originais."""
+    from .deps import get_library_import_repo, get_repo, get_settings
+    from .post_process import post_process_download
+
+    settings = get_settings()
+    repo = get_repo()
+    import_repo = get_library_import_repo()
+
+    # Downloads concluídos
+    from .domain import DownloadStatus
+    downloads = repo.list(status_filter=DownloadStatus.COMPLETED.value)
+    typer.echo(f"Downloads concluídos: {len(downloads)}")
+
+    dl_count = 0
+    for row in downloads:
+        ct = (row.get("content_type") or "").strip().lower()
+        if content_type and ct != content_type.strip().lower():
+            continue
+        cp = (row.get("content_path") or "").strip()
+        if not cp:
+            continue
+        name = (row.get("name") or "").strip()
+        if not name:
+            continue
+        already = row.get("post_processed")
+        if already:
+            continue
+
+        if dry_run:
+            typer.echo(f"  [dry-run] Reorganizaria: {name} ({ct}) @ {cp}")
+            dl_count += 1
+            continue
+
+        typer.echo(f"  Processando: {name} ({ct})")
+        try:
+            result = post_process_download(row["id"], cp, name, ct or None, force=True)
+            if result.get("success"):
+                dl_count += 1
+                typer.echo(f"    OK: {result.get('message', '')}")
+            else:
+                typer.echo(f"    Pulado: {result.get('message', '')}")
+        except Exception as e:
+            typer.echo(f"    Erro: {e}")
+
+    typer.echo(f"\nDownloads {'que seriam reorganizados' if dry_run else 'reorganizados'}: {dl_count}")
+
+    # Library imports
+    if import_repo:
+        imports = import_repo.list(
+            content_type=content_type.strip().lower() if content_type else None,
+        )
+        typer.echo(f"Itens importados: {len(imports)}")
+        imp_count = 0
+        for row in imports:
+            cp = (row.get("content_path") or "").strip()
+            if not cp:
+                continue
+            name = (row.get("name") or "").strip()
+            ct = (row.get("content_type") or "music").strip().lower()
+            if dry_run:
+                typer.echo(f"  [dry-run] Reorganizaria import: {name} ({ct}) @ {cp}")
+                imp_count += 1
+                continue
+
+            typer.echo(f"  Processando import: {name} ({ct})")
+            try:
+                result = post_process_download(0, cp, name, ct, force=True)
+                if result.get("success"):
+                    imp_count += 1
+                    if result.get("library_path"):
+                        import_repo.update_metadata(
+                            row["id"],
+                            previous_content_path=cp,
+                            content_path=result["library_path"],
+                            tmdb_id=result.get("tmdb_id"),
+                            imdb_id=result.get("imdb_id"),
+                        )
+                    typer.echo(f"    OK: {result.get('message', '')}")
+                else:
+                    typer.echo(f"    Pulado: {result.get('message', '')}")
+            except Exception as e:
+                typer.echo(f"    Erro: {e}")
+        typer.echo(f"Imports {'que seriam reorganizados' if dry_run else 'reorganizados'}: {imp_count}")
+
+    typer.echo("Concluído.")
 
 
 if __name__ == "__main__":

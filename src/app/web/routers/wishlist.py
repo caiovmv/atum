@@ -6,7 +6,7 @@ import asyncio
 import json
 from typing import Literal
 
-import requests
+import httpx
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
@@ -153,7 +153,7 @@ def run_wishlist(body: WishlistRunBody) -> dict:
             continue
         url = _runner_url("/downloads")
         try:
-            resp = requests.post(
+            resp = httpx.post(
                 url,
                 json={
                     "magnet": magnet,
@@ -164,7 +164,7 @@ def run_wishlist(body: WishlistRunBody) -> dict:
                 },
                 timeout=30,
             )
-        except requests.RequestException as e:
+        except httpx.HTTPError as e:
             errors.append(f"Runner: {e}")
             continue
         if resp.status_code != 200:

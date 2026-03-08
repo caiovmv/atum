@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import asyncio
+import logging
 import os
 import sys
 import tempfile
@@ -13,6 +13,8 @@ from threading import Event as ThreadEvent
 from threading import Thread
 
 from .domain import DownloadStatus
+
+logger = logging.getLogger(__name__)
 
 # Rate-limit: não persistir progresso mais que uma vez por segundo por download_id
 _LAST_PROGRESS_WRITE: dict[int, float] = {}
@@ -88,8 +90,8 @@ def _update_progress_from_status(download_id: int, status: object) -> None:
             eta_seconds=eta_seconds,
         )
         _LAST_PROGRESS_WRITE[download_id] = now
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Erro ao atualizar progresso do download %s: %s", download_id, exc)
 
 
 def run_worker(download_id: int, stop_event: ThreadEvent | None = None) -> None:
@@ -175,18 +177,30 @@ def run_worker(download_id: int, stop_event: ThreadEvent | None = None) -> None:
                     body=None,
                     payload={"download_id": download_id, "name": name},
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Falha ao criar notificação de download concluído: %s", exc)
             content_type = (row.get("content_type") or "music") if row.get("content_type") in ("music", "movies", "tv") else "music"
             if name:
                 def _fetch_cover() -> None:
                     try:
                         from .web.cover_service import fetch_and_cache_cover
                         fetch_and_cache_cover(download_id, content_type, name)
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.debug("Falha ao buscar capa para download %s: %s", download_id, exc)
                 t = Thread(target=_fetch_cover, daemon=True)
                 t.start()
+            # Pós-processamento (organizar arquivos, enriquecer TMDB/IMDB)
+            cp = repo.get(download_id)
+            final_content_path = (cp.get("content_path") or "").strip() if cp else ""
+            if final_content_path:
+                def _post_process() -> None:
+                    try:
+                        from .post_process import post_process_download
+                        post_process_download(download_id, final_content_path, name, content_type)
+                    except Exception as exc:
+                        logger.debug("Falha no pós-processamento do download %s: %s", download_id, exc)
+                t2 = Thread(target=_post_process, daemon=True)
+                t2.start()
     except Exception as e:
         if stop_event and stop_event.is_set():
             stopped_by_user = True
@@ -201,8 +215,8 @@ def run_worker(download_id: int, stop_event: ThreadEvent | None = None) -> None:
                     body=str(e)[:200],
                     payload={"download_id": download_id, "name": name},
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Falha ao criar notificação de download falho: %s", exc)
     finally:
         repo.set_pid(download_id, None)
         os.environ.pop("DL_TORRENT_DOWNLOAD_ID", None)

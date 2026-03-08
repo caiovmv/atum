@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { type ReactNode, memo } from 'react';
 import { CoverImage } from './CoverImage';
 import './MediaCard.css';
 
@@ -39,7 +39,7 @@ export interface MediaCardProps {
   clickAriaLabel?: string;
 }
 
-export function MediaCard({
+export const MediaCard = memo(function MediaCard({
   cover,
   title,
   source,
@@ -120,4 +120,4 @@ export function MediaCard({
       <div className="media-card-actions">{actions}</div>
     </article>
   );
-}
+});

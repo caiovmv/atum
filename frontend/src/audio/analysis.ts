@@ -85,38 +85,10 @@ export function computeFFT(analyser: AnalyserNode): Uint8Array {
   return data;
 }
 
-/** Ratio de buffer preenchido (0–1) para Streaming Signal. */
-export function computeStreamingSignal(player: HTMLAudioElement): number {
-  const duration = player.duration;
-  if (!duration || !isFinite(duration)) return 1;
-  const buffered = player.buffered;
-  if (buffered.length === 0) return 0;
-  const bufferedEnd = buffered.end(buffered.length - 1);
-  return bufferedEnd / duration;
-}
-
 export interface QualityMeta {
   codec?: string;
   bitrate?: number;
   sampleRate?: number;
-}
-
-/**
- * Score de qualidade 0–1 para QualityTune.
- * FLAC 96kHz → 1; FLAC 44kHz → 0.8; MP3 320 → 0.6; MP3 192 → 0.4; resto → 0.2.
- */
-export function detectQuality(meta: QualityMeta | null): number {
-  if (!meta?.codec) return 0.2;
-  const codec = (meta.codec || '').toUpperCase();
-  const sr = meta.sampleRate ?? 0;
-  const br = meta.bitrate ?? 0;
-
-  if (codec === 'FLAC' && sr >= 96000) return 1;
-  if (codec === 'FLAC') return 0.8;
-  if (codec === 'MP3' && br >= 320) return 0.6;
-  if (codec === 'MP3' && br >= 192) return 0.4;
-  if (codec === 'ALAC' || codec === 'AAC') return 0.7;
-  return 0.2;
 }
 
 /**

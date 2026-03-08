@@ -71,26 +71,64 @@ export function Feeds() {
   }, []);
 
   useEffect(() => {
-    fetchFeeds();
-  }, [fetchFeeds]);
+    const controller = new AbortController();
+    setLoading(true);
+    fetch('/api/feeds', { signal: controller.signal })
+      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
+      .then((data) => setFeeds(Array.isArray(data) ? data : []))
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        setFeeds([]);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
-    fetchPending();
-  }, [fetchPending]);
+    const controller = new AbortController();
+    setPendingLoading(true);
+    fetch('/api/feeds/pending', { signal: controller.signal })
+      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
+      .then((data) => {
+        setPending(Array.isArray(data) ? data : []);
+        setSelectedPending(new Set());
+      })
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        setPending([]);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setPendingLoading(false);
+      });
+    return () => controller.abort();
+  }, []);
 
   const feedsSseRef = useRef<EventSource | null>(null);
   const [feedsReconnecting, setFeedsReconnecting] = useState(false);
+  const feedsReconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fetchPendingRef = useRef(fetchPending);
+  fetchPendingRef.current = fetchPending;
   useEffect(() => {
+    let disposed = false;
     const open = () => {
-      if (feedsSseRef.current) return;
+      if (disposed || feedsSseRef.current) return;
       const es = new EventSource('/api/feeds/events');
       es.onmessage = () => {
         setFeedsReconnecting(false);
-        fetchPending();
+        fetchPendingRef.current();
       };
       es.onerror = () => {
         setFeedsReconnecting(true);
         es.close();
+        feedsSseRef.current = null;
+        if (!disposed) {
+          feedsReconnectRef.current = setTimeout(() => {
+            feedsReconnectRef.current = null;
+            if (document.visibilityState === 'visible') open();
+          }, 5000);
+        }
       };
       feedsSseRef.current = es;
     };
@@ -98,6 +136,10 @@ export function Feeds() {
       if (feedsSseRef.current) {
         feedsSseRef.current.close();
         feedsSseRef.current = null;
+      }
+      if (feedsReconnectRef.current) {
+        clearTimeout(feedsReconnectRef.current);
+        feedsReconnectRef.current = null;
       }
     };
     const onVisibility = () => {
@@ -107,10 +149,11 @@ export function Feeds() {
     if (document.visibilityState === 'visible') open();
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
+      disposed = true;
       document.removeEventListener('visibilitychange', onVisibility);
       close();
     };
-  }, [fetchPending]);
+  }, []);
 
   const showToastMessage = (msg: string) => showToast(msg, 4000);
 

@@ -1,0 +1,13 @@
+FROM python:3.12-slim
+WORKDIR /app
+ENV PYTHONPATH=/app/src
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc g++ libpq-dev ffmpeg libfftw3-dev libyaml-dev \
+    libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
+    libsamplerate0-dev libtag1-dev libchromaprint-dev \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
+COPY pyproject.toml ./
+COPY src/ ./src/
+COPY scripts/ ./scripts/
+RUN pip install --no-cache-dir --pre -e ".[ai]"

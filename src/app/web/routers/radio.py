@@ -7,7 +7,7 @@ import random
 import urllib.parse
 from pathlib import Path
 
-import requests
+import httpx
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 from starlette.responses import FileResponse
@@ -233,7 +233,7 @@ def _fetch_item_files(item: dict) -> list[dict]:
             url = _runner_url("/library-import/files") + "?" + urllib.parse.urlencode({"content_path": cp})
         else:
             url = _runner_url(f"/downloads/{item['id']}/files")
-        r = requests.get(url, timeout=10)
+        r = httpx.get(url, timeout=10)
         if r.status_code != 200:
             return []
         data = r.json()

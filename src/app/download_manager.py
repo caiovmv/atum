@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import signal
 import threading
-import time
 from pathlib import Path
 
 from .domain import DownloadStatus
 from .deps import get_repo, set_overrides, clear_overrides
+
+logger = logging.getLogger(__name__)
 
 # Re-export para testes
 def set_download_repository(repo) -> None:
@@ -105,8 +107,6 @@ def reconcile_downloads_with_filesystem() -> int:
     """Remove do DB registros completed cujo content_path não existe mais no disco; evict capa (Redis + arquivos).
     Para registros que permanecem, limpa cover_path no DB e evict se arquivo de capa não existir.
     Retorna quantos foram removidos."""
-    import logging
-    logger = logging.getLogger(__name__)
     try:
         from .web.cover_service import evict_cover_for_download
     except Exception:
@@ -130,8 +130,8 @@ def reconcile_downloads_with_filesystem() -> int:
                     if evict_cover_for_download:
                         try:
                             evict_cover_for_download(did)
-                        except Exception:
-                            pass
+                        except Exception as exc:
+                            logger.debug("Falha ao evictar capa do download %s: %s", did, exc)
                     if repo.delete(did):
                         removed += 1
                         logger.info("  [reconcile] Removendo download id=%s (sem content_path, path inferido não existe).", did)
@@ -143,8 +143,8 @@ def reconcile_downloads_with_filesystem() -> int:
             if evict_cover_for_download:
                 try:
                     evict_cover_for_download(did)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Falha ao evictar capa do download %s: %s", did, exc)
             if repo.delete(did):
                 removed += 1
     # Limpar cover_path e evict quando arquivo de capa não existe
@@ -164,8 +164,8 @@ def reconcile_downloads_with_filesystem() -> int:
             if evict_cover_for_download:
                 try:
                     evict_cover_for_download(did)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Falha ao evictar capa do download %s: %s", did, exc)
     return removed
 
 
@@ -263,14 +263,14 @@ def delete(download_id: int, remove_files: bool = False) -> bool:
         try:
             from .web.cover_service import evict_cover_for_download
             evict_cover_for_download(download_id)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("Falha ao evictar capa do download %s: %s", download_id, exc)
         if remove_files and row.get("save_path"):
             import shutil
             p = Path(row["save_path"])
             if p.is_dir():
                 try:
                     shutil.rmtree(p, ignore_errors=True)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Falha ao remover arquivos do download %s: %s", download_id, exc)
     return ok

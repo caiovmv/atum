@@ -29,16 +29,11 @@ export function ReceiverSlider({
   );
 
   return (
-    <div className={`receiver-hslider ${className}`.trim()}>
-      <div className="receiver-hslider-header">
-        <span className="receiver-hslider-label">{label}</span>
-        {displayValue != null && (
-          <span className="receiver-hslider-value">{displayValue}</span>
-        )}
-      </div>
+    <div className={`receiver-hctrl ${className}`.trim()}>
+      <span className="receiver-hctrl-label">{label}</span>
       <input
         type="range"
-        className="receiver-hslider-input"
+        className="receiver-hctrl-input"
         min={min}
         max={max}
         step={step}
@@ -46,6 +41,7 @@ export function ReceiverSlider({
         onChange={handleChange}
         aria-label={label}
       />
+      <span className="receiver-hctrl-value">{displayValue ?? value}</span>
     </div>
   );
 }

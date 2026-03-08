@@ -5,6 +5,9 @@ import { useToast } from '../contexts/ToastContext';
 import { IoCheckmarkCircle, IoCloseCircleOutline, IoSearch, IoAdd } from 'react-icons/io5';
 import { MediaCard } from '../components/MediaCard';
 import { SearchResultCardSkeleton } from '../components/SearchResultCardSkeleton';
+import { SearchFilesModal } from '../components/search/SearchFilesModal';
+import { SearchAddModal } from '../components/search/SearchAddModal';
+import { statusLabel } from '../utils/format';
 import './Search.css';
 
 const SEARCH_STORAGE_KEY = 'atum-search-state';
@@ -88,16 +91,6 @@ function titleMatchesQuery(title: string, searchQuery: string): boolean {
   return words.every((w) => t.includes(w));
 }
 
-function downloadStatusLabel(status: string): string {
-  const s = (status || '').toLowerCase();
-  if (s === 'completed') return 'Concluído';
-  if (s === 'downloading') return 'Baixando';
-  if (s === 'queued') return 'Enfileirado';
-  if (s === 'paused') return 'Pausado';
-  if (s === 'failed') return 'Falhou';
-  return status || '—';
-}
-
 function normalizeMagnet(m: string | null | undefined): string {
   return (m || '').trim();
 }
@@ -121,20 +114,8 @@ export function Search() {
   const [qualityFilter, setQualityFilter] = useState('');
   const [audioFilter, setAudioFilter] = useState('');
   const { showToast } = useToast();
-  const [filesModal, setFilesModal] = useState<{
-    result: SearchResult | null;
-    loading: boolean;
-    error: string | null;
-    data: { name: string; files: { index: number; path: string; size: number }[] } | null;
-  }>({ result: null, loading: false, error: null, data: null });
-  const [addModal, setAddModal] = useState<{
-    result: SearchResult | null;
-    loading: boolean;
-    error: string | null;
-    data: { name: string; files: { index: number; path: string; size: number }[] } | null;
-    included: Set<number>;
-    submitting: boolean;
-  }>({ result: null, loading: false, error: null, data: null, included: new Set(), submitting: false });
+  const [filesModalResult, setFilesModalResult] = useState<SearchResult | null>(null);
+  const [addModalResult, setAddModalResult] = useState<SearchResult | null>(null);
   const { downloads: contextDownloads } = useDownloadsEvents();
   const downloads = useMemo(
     () =>
@@ -168,7 +149,8 @@ export function Search() {
   }, [indexerStatus]);
 
   useEffect(() => {
-    fetch('/api/indexers/status')
+    const controller = new AbortController();
+    fetch('/api/indexers/status', { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : {}))
       .then((status: Record<string, boolean>) => {
         setIndexerStatus(status);
@@ -179,35 +161,51 @@ export function Search() {
           return new Set(enabled.filter((e) => prev.has(e)));
         });
       })
-      .catch(() => setIndexerStatus({}));
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        setIndexerStatus({});
+      });
+    return () => controller.abort();
   }, []);
 
   const indexersSseRef = useRef<EventSource | null>(null);
   const [indexersReconnecting, setIndexersReconnecting] = useState(false);
+  const indexersReconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
+    let disposed = false;
     const open = () => {
-      if (!indexersSseRef.current) {
-        const es = new EventSource('/api/indexers/events');
-        es.onmessage = (event) => {
-          setIndexersReconnecting(false);
-          try {
-            const status = JSON.parse(event.data);
-            if (status && typeof status === 'object') setIndexerStatus(status);
-          } catch {
-            // ignore
-          }
-        };
-        es.onerror = () => {
-          setIndexersReconnecting(true);
-          es.close();
-        };
-        indexersSseRef.current = es;
-      }
+      if (disposed || indexersSseRef.current) return;
+      const es = new EventSource('/api/indexers/events');
+      es.onmessage = (event) => {
+        setIndexersReconnecting(false);
+        try {
+          const status = JSON.parse(event.data);
+          if (status && typeof status === 'object') setIndexerStatus(status);
+        } catch {
+          // ignore
+        }
+      };
+      es.onerror = () => {
+        setIndexersReconnecting(true);
+        es.close();
+        indexersSseRef.current = null;
+        if (!disposed) {
+          indexersReconnectRef.current = setTimeout(() => {
+            indexersReconnectRef.current = null;
+            if (document.visibilityState === 'visible') open();
+          }, 5000);
+        }
+      };
+      indexersSseRef.current = es;
     };
     const close = () => {
       if (indexersSseRef.current) {
         indexersSseRef.current.close();
         indexersSseRef.current = null;
+      }
+      if (indexersReconnectRef.current) {
+        clearTimeout(indexersReconnectRef.current);
+        indexersReconnectRef.current = null;
       }
     };
     const onVisibility = () => {
@@ -217,12 +215,12 @@ export function Search() {
     if (document.visibilityState === 'visible') open();
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
+      disposed = true;
       document.removeEventListener('visibilitychange', onVisibility);
       close();
     };
   }, []);
 
-  /** Resolve magnet quando não veio na busca (ex.: 1337x). Retorna o resultado com magnet preenchido se a API resolver. */
   async function ensureMagnetOrTorrentUrl(r: SearchResult): Promise<SearchResult | null> {
     if (r.magnet || r.torrent_url) return r;
     if (!r.indexer || !r.torrent_id) return null;
@@ -233,159 +231,18 @@ export function Search() {
         body: JSON.stringify({ indexer: r.indexer, torrent_id: r.torrent_id }),
       });
       const data = await res.json().catch(() => null);
-      const magnet = data?.magnet ?? null;
-      if (magnet) return { ...r, magnet };
-    } catch {
-      /* ignore */
-    }
+      if (data?.magnet) return { ...r, magnet: data.magnet };
+    } catch { /* ignore */ }
     return null;
   }
 
-  async function openFilesModal(r: SearchResult) {
-    const resultWithLink = await ensureMagnetOrTorrentUrl(r);
-    if (!resultWithLink || (!resultWithLink.magnet && !resultWithLink.torrent_url)) {
+  async function openModal(r: SearchResult, setter: (v: SearchResult | null) => void) {
+    const resolved = await ensureMagnetOrTorrentUrl(r);
+    if (!resolved || (!resolved.magnet && !resolved.torrent_url)) {
       showToastMessage('Este resultado não possui magnet nem link do .torrent.');
       return;
     }
-    const linkR = resultWithLink;
-    setFilesModal({ result: linkR, loading: true, error: null, data: null });
-    try {
-      const res = await fetch('/api/torrent/metadata', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ magnet: linkR.magnet ?? null, torrent_url: linkR.torrent_url ?? null }),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        setFilesModal((m) => ({ ...m, loading: false, error: data?.detail || res.statusText || 'Erro ao obter arquivos' }));
-        return;
-      }
-      setFilesModal((m) => ({ ...m, loading: false, data: data || null }));
-    } catch (err) {
-      setFilesModal((m) => ({ ...m, loading: false, error: err instanceof Error ? err.message : 'Erro de rede' }));
-    }
-  }
-
-  function closeFilesModal() {
-    setFilesModal({ result: null, loading: false, error: null, data: null });
-  }
-
-  async function openAddModal(r: SearchResult) {
-    const resultWithLink = await ensureMagnetOrTorrentUrl(r);
-    if (!resultWithLink || (!resultWithLink.magnet && !resultWithLink.torrent_url)) {
-      showToastMessage('Este resultado não possui magnet nem link do .torrent.');
-      return;
-    }
-    const linkR = resultWithLink;
-    setAddModal({ result: linkR, loading: true, error: null, data: null, included: new Set(), submitting: false });
-    try {
-      const res = await fetch('/api/torrent/metadata', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ magnet: linkR.magnet ?? null, torrent_url: linkR.torrent_url ?? null }),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        const errMsg = typeof data?.detail === 'string' ? data.detail : (data?.detail ? JSON.stringify(data.detail) : res.statusText || 'Erro ao obter arquivos');
-        setAddModal((m) => ({ ...m, loading: false, error: errMsg }));
-        return;
-      }
-      const files = (data?.files ?? []) as { index: number; path: string; size: number }[];
-      setAddModal((m) => ({
-        ...m,
-        loading: false,
-        data: data ? { name: data.name ?? linkR.title, files } : null,
-        included: new Set(files.map((f) => f.index)),
-      }));
-    } catch (err) {
-      setAddModal((m) => ({ ...m, loading: false, error: err instanceof Error ? err.message : 'Erro de rede' }));
-    }
-  }
-
-  function closeAddModal() {
-    setAddModal({ result: null, loading: false, error: null, data: null, included: new Set(), submitting: false });
-  }
-
-  async function retryAddModal() {
-    const linkR = addModal.result;
-    if (!linkR || (!linkR.magnet && !linkR.torrent_url)) return;
-    setAddModal((m) => ({ ...m, loading: true, error: null }));
-    try {
-      const res = await fetch('/api/torrent/metadata', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ magnet: linkR.magnet ?? null, torrent_url: linkR.torrent_url ?? null }),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        const msg = typeof data?.detail === 'string' ? data.detail : data?.detail?.msg ?? res.statusText ?? 'Erro ao obter arquivos';
-        setAddModal((m) => ({ ...m, loading: false, error: msg }));
-        return;
-      }
-      const files = (data?.files ?? []) as { index: number; path: string; size: number }[];
-      setAddModal((m) => ({
-        ...m,
-        loading: false,
-        data: data ? { name: data.name ?? linkR.title, files } : null,
-        included: new Set(files.map((f) => f.index)),
-      }));
-    } catch (err) {
-      setAddModal((m) => ({ ...m, loading: false, error: err instanceof Error ? err.message : 'Erro de rede' }));
-    }
-  }
-
-  function toggleAddModalFile(index: number) {
-    setAddModal((m) => {
-      if (!m.data) return m;
-      const next = new Set(m.included);
-      if (next.has(index)) next.delete(index);
-      else next.add(index);
-      return { ...m, included: next };
-    });
-  }
-
-  function setAddModalIncludeAll(include: boolean) {
-    setAddModal((m) => {
-      if (!m.data) return m;
-      return { ...m, included: include ? new Set(m.data.files.map((f) => f.index)) : new Set() };
-    });
-  }
-
-  async function confirmAddModal() {
-    const { result, data, included, submitting } = addModal;
-    const link = result?.magnet || result?.torrent_url;
-    if (!link || !data || submitting) return;
-    setAddModal((m) => ({ ...m, submitting: true }));
-    const excluded_file_indices = data.files.map((f) => f.index).filter((i) => !included.has(i));
-    try {
-      const res = await fetch('/api/downloads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          magnet: link,
-          name: result.title,
-          content_type: contentType,
-          start_now: true,
-          excluded_file_indices,
-          torrent_files: data.files,
-        }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      closeAddModal();
-      showToastMessage('Download adicionado à fila.');
-      navigate('/downloads');
-    } catch (err) {
-      showToastMessage(err instanceof Error ? err.message : 'Erro ao adicionar');
-    } finally {
-      setAddModal((m) => ({ ...m, submitting: false }));
-    }
-  }
-
-  function formatFileSize(bytes: number): string {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+    setter(resolved);
   }
 
   const filteredResults = useMemo(() => {
@@ -460,11 +317,13 @@ export function Search() {
 
   useEffect(() => {
     if (!query.trim() || results.length === 0) return;
+    const controller = new AbortController();
     const params = new URLSearchParams({ q: query.trim(), content_type: contentType });
-    fetch(`/api/search-filter-suggestions?${params}`)
+    fetch(`/api/search-filter-suggestions?${params}`, { signal: controller.signal })
       .then((res) => (res.ok ? res.json() : { years: [], genres: [], qualities: [] }))
       .then((data: FilterSuggestions) => setFilterSuggestions(data))
       .catch(() => {});
+    return () => controller.abort();
   }, [query, contentType, results.length]);
 
   const handleSearch = useCallback((e: React.FormEvent) => {
@@ -782,7 +641,7 @@ export function Search() {
             const overlay = match
               ? {
                   type: (match.progress != null ? 'progress' : 'status') as 'progress' | 'status',
-                  label: downloadStatusLabel(match.status),
+                  label: statusLabel(match.status),
                   percent: match.progress,
                 }
               : undefined;
@@ -807,7 +666,7 @@ export function Search() {
                 <button
                   type="button"
                   className="media-card-play-btn"
-                  onClick={(e) => { e.stopPropagation(); openAddModal(r); }}
+                  onClick={(e) => { e.stopPropagation(); openModal(r, setAddModalResult); }}
                   aria-label={`Adicionar ${r.title} à fila`}
                 >
                   <IoAdd size={24} />
@@ -818,7 +677,7 @@ export function Search() {
                   <button
                     type="button"
                     className="secondary add-btn"
-                    onClick={() => openFilesModal(r)}
+                    onClick={() => openModal(r, setFilesModalResult)}
                     aria-label="Ver lista de arquivos do torrent"
                   >
                     Ver arquivos
@@ -826,7 +685,7 @@ export function Search() {
                   <button
                     type="button"
                     className="primary add-btn"
-                    onClick={() => openAddModal(r)}
+                    onClick={() => openModal(r, setAddModalResult)}
                     aria-label={`Adicionar ${r.title} à fila`}
                   >
                     Adicionar
@@ -857,7 +716,7 @@ export function Search() {
                   )}
                 </div>
               }
-              onClick={() => openFilesModal(r)}
+              onClick={() => openModal(r, setFilesModalResult)}
               clickAriaLabel={`Ver lista de arquivos de ${r.title} (${indexerLabel(r.indexer)})`}
             />
           );
@@ -878,98 +737,20 @@ export function Search() {
         )}
       </section>
 
-      {filesModal.result && (
-        <div className="search-files-modal-backdrop" onClick={closeFilesModal} aria-hidden>
-          <div className="search-files-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-labelledby="files-modal-title" aria-modal="true">
-            <div className="search-files-modal-header">
-              <h2 id="files-modal-title">Arquivos do torrent</h2>
-              <button type="button" className="search-files-modal-close" onClick={closeFilesModal} aria-label="Fechar">×</button>
-            </div>
-            <div className="search-files-modal-body">
-              {filesModal.loading && <p className="search-files-modal-loading">Obtendo lista de arquivos…</p>}
-              {filesModal.error && <p className="search-files-modal-error" role="alert">{filesModal.error}</p>}
-              {!filesModal.loading && !filesModal.error && filesModal.data && (
-                <>
-                  <p className="search-files-modal-name">{filesModal.data.name || filesModal.result.title}</p>
-                  <ul className="search-files-list">
-                    {filesModal.data.files.map((f) => (
-                      <li key={f.index} className="search-files-item">
-                        <span className="search-files-path">{f.path}</span>
-                        <span className="search-files-size">{formatFileSize(f.size)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="search-files-modal-footer">
-                    <button
-                      type="button"
-                      className="primary add-btn"
-                      onClick={() => {
-                        if (filesModal.result) {
-                          closeFilesModal();
-                          openAddModal(filesModal.result);
-                        }
-                      }}
-                      aria-label={`Adicionar ${filesModal.result?.title ?? 'este torrent'} à fila`}
-                    >
-                      Adicionar à fila
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
+      {filesModalResult && (
+        <SearchFilesModal
+          result={filesModalResult}
+          onClose={() => setFilesModalResult(null)}
+          onAddToQueue={() => setAddModalResult(filesModalResult)}
+        />
       )}
 
-      {addModal.result && (
-        <div className="search-files-modal-backdrop" onClick={closeAddModal} aria-hidden>
-          <div className="search-add-modal search-files-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-labelledby="add-modal-title" aria-modal="true">
-            <div className="search-files-modal-header">
-              <h2 id="add-modal-title">Adicionar à fila</h2>
-              <button type="button" className="search-files-modal-close" onClick={closeAddModal} aria-label="Fechar">×</button>
-            </div>
-            <div className="search-files-modal-body">
-              {addModal.loading && <p className="search-files-modal-loading">Obtendo lista de arquivos…</p>}
-              {addModal.error && (
-                <div className="search-files-modal-error-wrap" role="alert">
-                  <p className="search-files-modal-error">{typeof addModal.error === 'string' ? addModal.error : String(addModal.error)}</p>
-                  <button type="button" className="primary add-btn" onClick={retryAddModal}>Tentar novamente</button>
-                </div>
-              )}
-              {!addModal.loading && !addModal.error && addModal.data && (
-                <>
-                  <p className="search-files-modal-name">{addModal.data.name || addModal.result?.title}</p>
-                  <div className="search-add-modal-actions-row">
-                    <button type="button" className="secondary add-btn" onClick={() => setAddModalIncludeAll(true)}>Selecionar todos</button>
-                    <button type="button" className="secondary add-btn" onClick={() => setAddModalIncludeAll(false)}>Desmarcar todos</button>
-                  </div>
-                  <ul className="search-files-list">
-                    {addModal.data.files.map((f) => (
-                      <li key={f.index} className="search-files-item search-add-file-item">
-                        <label className="search-add-file-label">
-                          <input
-                            type="checkbox"
-                            checked={addModal.included.has(f.index)}
-                            onChange={() => toggleAddModalFile(f.index)}
-                            aria-label={`Incluir ${f.path}`}
-                          />
-                          <span className="search-files-path">{f.path}</span>
-                          <span className="search-files-size">{formatFileSize(f.size)}</span>
-                        </label>
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="search-add-modal-footer">
-                    <button type="button" className="secondary add-btn" onClick={closeAddModal}>Cancelar</button>
-                    <button type="button" className="primary add-btn" disabled={addModal.submitting} onClick={confirmAddModal}>
-                      {addModal.submitting ? '…' : 'Adicionar à fila'}
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
+      {addModalResult && (
+        <SearchAddModal
+          result={addModalResult}
+          contentType={contentType}
+          onClose={() => setAddModalResult(null)}
+        />
       )}
     </div>
   );
