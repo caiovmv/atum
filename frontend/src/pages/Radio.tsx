@@ -66,13 +66,13 @@ export function Radio() {
   const mountedRef = useRef(true);
   useEffect(() => () => { mountedRef.current = false; }, []);
 
-  const fetchSintonias = useCallback(async () => {
+  const fetchSintonias = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     try {
-      const res = await fetch('/api/radio/sintonias');
-      if (!mountedRef.current) return;
+      const res = await fetch('/api/radio/sintonias', { signal });
+      if (signal?.aborted) return;
       const body = await res.text();
-      if (!mountedRef.current) return;
+      if (signal?.aborted) return;
       if (!res.ok) {
         let detail = body;
         try {
@@ -90,40 +90,46 @@ export function Radio() {
       else if (list.length > 0 && !list.some((s: Sintonia) => s.id === selectedId))
         setSelectedId(list[0].id);
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
       if (!mountedRef.current) return;
       setSintonias([]);
       showToast(err instanceof Error ? err.message : 'Não foi possível carregar as sintonias.', 5000);
     } finally {
-      if (mountedRef.current) setLoading(false);
+      if (mountedRef.current && !signal?.aborted) setLoading(false);
     }
   }, [showToast, selectedId]);
 
   useEffect(() => {
-    fetchSintonias();
+    const controller = new AbortController();
+    fetchSintonias(controller.signal);
+    return () => controller.abort();
   }, [fetchSintonias]);
 
-  const fetchQueue = useCallback(async (sintoniaId: number) => {
+  const fetchQueue = useCallback(async (sintoniaId: number, signal?: AbortSignal) => {
     setTracksLoading(true);
     try {
-      const res = await fetch(`/api/radio/sintonias/${sintoniaId}/queue?limit=100`, { method: 'POST' });
-      if (!mountedRef.current) return;
+      const res = await fetch(`/api/radio/sintonias/${sintoniaId}/queue?limit=100`, { method: 'POST', signal });
+      if (signal?.aborted) return;
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
-      if (!mountedRef.current) return;
+      if (signal?.aborted) return;
       const list = data?.tracks ?? [];
       setDisplayTracks(list);
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
       if (!mountedRef.current) return;
       setDisplayTracks([]);
       showToast(err instanceof Error ? err.message : 'Não foi possível carregar a fila.', 4000);
     } finally {
-      if (mountedRef.current) setTracksLoading(false);
+      if (mountedRef.current && !signal?.aborted) setTracksLoading(false);
     }
   }, [showToast]);
 
   useEffect(() => {
-    if (selectedId != null) fetchQueue(selectedId);
-    else setDisplayTracks([]);
+    if (selectedId == null) { setDisplayTracks([]); return; }
+    const controller = new AbortController();
+    fetchQueue(selectedId, controller.signal);
+    return () => controller.abort();
   }, [selectedId, fetchQueue]);
 
   useEffect(() => {

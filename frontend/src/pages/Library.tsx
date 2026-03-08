@@ -4,6 +4,7 @@ import { IoPlay, IoRefresh } from 'react-icons/io5';
 import { MediaCard } from '../components/MediaCard';
 import { EmptyState } from '../components/EmptyState';
 import { useToast } from '../contexts/ToastContext';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { statusLabel } from '../utils/format';
 import './Library.css';
 
@@ -46,6 +47,7 @@ export function Library() {
   const [videoKind, setVideoKind] = useState<string>(''); // '' | movies | tv
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 350);
   const [facets, setFacets] = useState<Facets>({ artists: [], albums: [], genres: [], tags: [] });
   const [editingItem, setEditingItem] = useState<LibraryItem | null>(null);
   const [editForm, setEditForm] = useState({ name: '', year: '', artist: '', album: '', genre: '', tagsStr: '' });
@@ -60,16 +62,17 @@ export function Library() {
 
   const contentTypeForFacets = section === 'music' ? 'music' : (videoKind || 'movies');
 
-  const fetchFacets = useCallback(async () => {
+  const fetchFacets = useCallback(async (signal?: AbortSignal) => {
     try {
       if (section === 'videos' && !videoKind) {
         const [r1, r2] = await Promise.all([
-          fetch('/api/library/facets?content_type=movies'),
-          fetch('/api/library/facets?content_type=tv'),
+          fetch('/api/library/facets?content_type=movies', { signal }),
+          fetch('/api/library/facets?content_type=tv', { signal }),
         ]);
         const d1 = r1.ok ? await r1.json() : {};
         const d2 = r2.ok ? await r2.json() : {};
         const merge = (a: string[], b: string[]) => [...new Set([...(a || []), ...(b || [])])].sort();
+        if (signal?.aborted) return;
         setFacets({
           artists: [],
           albums: [],
@@ -78,8 +81,9 @@ export function Library() {
         });
       } else {
         const ct = section === 'music' ? 'music' : contentTypeForFacets;
-        const res = await fetch(`/api/library/facets?content_type=${ct}`);
+        const res = await fetch(`/api/library/facets?content_type=${ct}`, { signal });
         const data = await res.ok ? await res.json() : {};
+        if (signal?.aborted) return;
         setFacets({
           artists: data.artists || [],
           albums: data.albums || [],
@@ -87,12 +91,13 @@ export function Library() {
           tags: data.tags || [],
         });
       }
-    } catch {
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
       setFacets({ artists: [], albums: [], genres: [], tags: [] });
     }
   }, [section, contentTypeForFacets, videoKind]);
 
-  const fetchLibrary = useCallback(async (silent = false) => {
+  const fetchLibrary = useCallback(async (silent = false, signal?: AbortSignal) => {
     if (!silent) setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -106,31 +111,37 @@ export function Library() {
         if (selectedFacet) params.set('genre', selectedFacet);
       }
       selectedTags.forEach((t) => params.append('tag', t));
-      if (search.trim()) params.set('q', search.trim());
-      const res = await fetch(`/api/library?${params}`);
+      if (debouncedSearch.trim()) params.set('q', debouncedSearch.trim());
+      const res = await fetch(`/api/library?${params}`, { signal });
       if (!res.ok) {
         if (res.status === 503) throw new Error('Runner não configurado.');
         throw new Error(await res.text());
       }
       const data = await res.json();
+      if (signal?.aborted) return;
       let list = Array.isArray(data) ? data : [];
       if (section === 'videos' && !videoKind) {
         list = list.filter((x: LibraryItem) => x.content_type === 'movies' || x.content_type === 'tv');
       }
       setItems(list);
-    } catch {
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
       if (!silent) setItems([]);
     } finally {
-      if (!silent) setLoading(false);
+      if (!signal?.aborted && !silent) setLoading(false);
     }
-  }, [section, viewBy, selectedFacet, videoKind, selectedTags, search]);
+  }, [section, viewBy, selectedFacet, videoKind, selectedTags, debouncedSearch]);
 
   useEffect(() => {
-    fetchFacets();
+    const controller = new AbortController();
+    fetchFacets(controller.signal);
+    return () => controller.abort();
   }, [fetchFacets]);
 
   useEffect(() => {
-    fetchLibrary();
+    const controller = new AbortController();
+    fetchLibrary(false, controller.signal);
+    return () => controller.abort();
   }, [fetchLibrary]);
 
   const librarySseRef = useRef<EventSource | null>(null);

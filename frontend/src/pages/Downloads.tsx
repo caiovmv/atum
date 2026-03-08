@@ -49,21 +49,22 @@ export function Downloads() {
   );
   const lastUpdated = contextLastUpdated;
 
-  const fetchDownloads = useCallback(async () => {
+  const fetchDownloads = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setError(null);
     try {
       const url = statusFilter ? `/api/downloads?status=${encodeURIComponent(statusFilter)}` : '/api/downloads';
-      const res = await fetch(url);
+      const res = await fetch(url, { signal });
       if (!res.ok) {
         if (res.status === 503) throw new Error('Runner não configurado. Inicie: dl-torrent runner');
         throw new Error(await res.text());
       }
-      contextRefetch();
+      if (!signal?.aborted) contextRefetch();
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
       setError(err instanceof Error ? err.message : 'Erro ao carregar');
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   }, [statusFilter, contextRefetch]);
 

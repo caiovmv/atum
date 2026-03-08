@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDownloadsEvents } from '../contexts/DownloadsEventsContext';
 import { useToast } from '../contexts/ToastContext';
+import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { IoCheckmarkCircle, IoCloseCircleOutline, IoSearch, IoAdd } from 'react-icons/io5';
 import { MediaCard } from '../components/MediaCard';
 import { SearchResultCardSkeleton } from '../components/SearchResultCardSkeleton';
@@ -97,6 +98,7 @@ function normalizeMagnet(m: string | null | undefined): string {
 
 export function Search() {
   const [query, setQuery] = useState('');
+  const debouncedQuery = useDebouncedValue(query, 400);
   const [contentType, setContentType] = useState<'music' | 'movies' | 'tv'>('music');
   const [sortBy, setSortBy] = useState<'seeders' | 'size'>('seeders');
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -316,15 +318,15 @@ export function Search() {
   }, []);
 
   useEffect(() => {
-    if (!query.trim() || results.length === 0) return;
+    if (!debouncedQuery.trim() || results.length === 0) return;
     const controller = new AbortController();
-    const params = new URLSearchParams({ q: query.trim(), content_type: contentType });
+    const params = new URLSearchParams({ q: debouncedQuery.trim(), content_type: contentType });
     fetch(`/api/search-filter-suggestions?${params}`, { signal: controller.signal })
       .then((res) => (res.ok ? res.json() : { years: [], genres: [], qualities: [] }))
       .then((data: FilterSuggestions) => setFilterSuggestions(data))
       .catch(() => {});
     return () => controller.abort();
-  }, [query, contentType, results.length]);
+  }, [debouncedQuery, contentType, results.length]);
 
   const handleSearch = useCallback((e: React.FormEvent) => {
     e.preventDefault();

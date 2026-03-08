@@ -95,13 +95,16 @@ export function ReceiverPanel({
   const engineRef = useRef<AudioEngine | null>(null);
   const [engineReady, setEngineReady] = useState(false);
 
-  // Meter state (L/R independentes)
-  const [vuValueL, setVuValueL] = useState(-20);
-  const [vuValueR, setVuValueR] = useState(-20);
-  const [peakValue, setPeakValue] = useState(-60);
-  const [fftData, setFftData] = useState<Uint8Array>(new Uint8Array(0));
+  // Meter state (consolidated for fewer re-renders)
+  const [meterState, setMeterState] = useState<{ vuL: number; vuR: number; peak: number; fft: Uint8Array }>({
+    vuL: -20,
+    vuR: -20,
+    peak: -60,
+    fft: new Uint8Array(0),
+  });
   const [sampleRate, setSampleRate] = useState(44100);
   const [qualityMeta, setQualityMeta] = useState<QualityMeta | null>(null);
+  const analysisBuffers = useRef<{ timeL: Float32Array | null; timeR: Float32Array | null; timeMono: Float32Array | null; freq: Uint8Array | null }>({ timeL: null, timeR: null, timeMono: null, freq: null });
 
   // DSP control state (restored from localStorage)
   const savedDsp = useRef(loadDspState()).current;
@@ -199,19 +202,34 @@ export function ReceiverPanel({
     };
   }, [isReady, wavesurfer, contentType, fileName]);
 
-  // Analysis loop (L/R independentes)
+  // Analysis loop (~30fps, consolidated state, reused buffers)
   useEffect(() => {
     if (!isReady || !wavesurfer || !engineReady) return;
     const media = wavesurfer.getMediaElement();
     if (!media) return;
     let raf = 0;
+    let frame = 0;
     const tick = () => {
+      frame++;
       const engine = engineRef.current;
       if (!engine?.analyser) { raf = requestAnimationFrame(tick); return; }
-      setVuValueL(dBFS_to_VU(computeRMS_dBFS(engine.analyserL)));
-      setVuValueR(dBFS_to_VU(computeRMS_dBFS(engine.analyserR)));
-      setPeakValue(computePeak_dBFS(engine.analyser));
-      setFftData(computeFFT(engine.analyser));
+      if (frame % 2 === 0) {
+        const bufs = analysisBuffers.current;
+        if (!bufs.timeL || bufs.timeL.length !== engine.analyserL.fftSize)
+          bufs.timeL = new Float32Array(engine.analyserL.fftSize);
+        if (!bufs.timeR || bufs.timeR.length !== engine.analyserR.fftSize)
+          bufs.timeR = new Float32Array(engine.analyserR.fftSize);
+        if (!bufs.timeMono || bufs.timeMono.length !== engine.analyser.fftSize)
+          bufs.timeMono = new Float32Array(engine.analyser.fftSize);
+        if (!bufs.freq || bufs.freq.length !== engine.analyser.frequencyBinCount)
+          bufs.freq = new Uint8Array(engine.analyser.frequencyBinCount);
+
+        const vuL = dBFS_to_VU(computeRMS_dBFS(engine.analyserL, bufs.timeL));
+        const vuR = dBFS_to_VU(computeRMS_dBFS(engine.analyserR, bufs.timeR));
+        const peak = computePeak_dBFS(engine.analyser, bufs.timeMono);
+        computeFFT(engine.analyser, bufs.freq);
+        setMeterState({ vuL, vuR, peak, fft: bufs.freq });
+      }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -444,10 +462,10 @@ export function ReceiverPanel({
         <div className="receiver-stack-glass">
           <div className="receiver-row-meters">
             <div className="receiver-meters-lr">
-              <VuMeter value={vuValueL} label="dBLevel L" meterIndex={0} />
-              <VuMeter value={vuValueR} label="dBLevel R" meterIndex={1} />
+              <VuMeter value={meterState.vuL} label="dBLevel L" meterIndex={0} />
+              <VuMeter value={meterState.vuR} label="dBLevel R" meterIndex={1} />
             </div>
-            <PowerMeter value={peakValue} />
+            <PowerMeter value={meterState.peak} />
           </div>
         </div>
       </div>
@@ -457,7 +475,7 @@ export function ReceiverPanel({
       {/* Stack 3: Spectrum + Waveform */}
       <div className="receiver-stack-spectrum">
         <div className="receiver-stack-glass">
-          <Spectrum data={fftData} sampleRate={sampleRate} />
+          <Spectrum data={meterState.fft} sampleRate={sampleRate} />
           <div
             className={`receiver-waveform-wrap${showWaveform ? '' : ' receiver-waveform-wrap--hidden'}`}
             ref={containerRef}
@@ -537,7 +555,7 @@ export function ReceiverPanel({
         </div>
         <div className={`smarteq-panel-wrap${smartEqActive ? ' smarteq-panel-wrap--open' : ''}`}>
           <SmartEQ
-            fftData={fftData}
+            fftData={meterState.fft}
             sampleRate={sampleRate}
             audioCtx={engineRef.current?.ctx ?? null}
             onApplyCorrection={handleSmartEqCorrection}

@@ -16,17 +16,38 @@ export interface RoomMeasurement {
 export type RoomEQPhase = 'idle' | 'requesting-mic' | 'measuring' | 'done' | 'error';
 
 /**
- * Gera um AudioBuffer com pink noise.
- * Pink noise tem energia igual por oitava (adequado para calibracao).
- * Algoritmo: Voss-McCartney simplificado (soma de octave bands).
+ * Gera um AudioBuffer com pink noise via Web Worker (off main thread).
+ * Fallback síncrono se Workers não estiverem disponíveis.
  */
-export function generatePinkNoise(ctx: AudioContext, durationSec: number): AudioBuffer {
+export async function generatePinkNoise(ctx: AudioContext, durationSec: number): Promise<AudioBuffer> {
   const length = Math.ceil(ctx.sampleRate * durationSec);
+
+  try {
+    const worker = new Worker(new URL('./pinkNoise.worker.ts', import.meta.url), { type: 'module' });
+    const samples = await new Promise<Float32Array>((resolve, reject) => {
+      worker.onmessage = (e: MessageEvent<ArrayBuffer>) => {
+        resolve(new Float32Array(e.data));
+        worker.terminate();
+      };
+      worker.onerror = (err) => {
+        worker.terminate();
+        reject(err);
+      };
+      worker.postMessage({ length });
+    });
+    const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+    buffer.getChannelData(0).set(samples);
+    return buffer;
+  } catch {
+    return generatePinkNoiseFallback(ctx, length);
+  }
+}
+
+function generatePinkNoiseFallback(ctx: AudioContext, length: number): AudioBuffer {
   const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
   const data = buffer.getChannelData(0);
 
   let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
-
   for (let i = 0; i < length; i++) {
     const white = Math.random() * 2 - 1;
     b0 = 0.99886 * b0 + white * 0.0555179;
@@ -39,7 +60,6 @@ export function generatePinkNoise(ctx: AudioContext, durationSec: number): Audio
     b6 = white * 0.115926;
     data[i] = pink * 0.11;
   }
-
   return buffer;
 }
 
@@ -111,7 +131,7 @@ export class RoomEQSession {
     this.micAnalyser.smoothingTimeConstant = 0.4;
     this.micSource.connect(this.micAnalyser);
 
-    const pinkBuffer = generatePinkNoise(this.ctx, 6);
+    const pinkBuffer = await generatePinkNoise(this.ctx, 6);
     this.noiseGain = this.ctx.createGain();
     this.noiseGain.gain.value = volume;
     this.noiseSource = this.ctx.createBufferSource();

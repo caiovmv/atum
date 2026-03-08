@@ -80,26 +80,48 @@ export function Settings() {
   const [testing, setTesting] = useState<Record<string, boolean>>({});
   const [fetchError, setFetchError] = useState<string | null>(null);
 
-  const fetchSettings = useCallback(async () => {
+  const fetchSettings = useCallback(async (signal?: AbortSignal) => {
     setFetchError(null);
     try {
-      const res = await fetch('/api/settings');
+      const res = await fetch('/api/settings', { signal });
+      if (signal?.aborted) return;
       if (res.ok) {
         const data = await res.json();
         setSettings(data);
       } else {
         setFetchError(`Erro ao carregar configurações (HTTP ${res.status})`);
       }
-    } catch {
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
       setFetchError('Erro de conexão ao carregar configurações');
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchSettings();
-  }, [fetchSettings]);
+    const controller = new AbortController();
+    const signal = controller.signal;
+    setLoading(true);
+    Promise.all([
+      fetch('/api/settings', { signal }).then((r) => (r.ok ? r.json() : null)),
+      fetch('/api/settings/enrichment-stats', { signal }).then((r) => (r.ok ? r.json() : null)),
+    ])
+      .then(([settingsData, statsData]) => {
+        if (signal.aborted) return;
+        if (settingsData) setSettings(settingsData);
+        else setFetchError('Erro ao carregar configurações');
+        if (statsData) setEnrichmentStats(statsData);
+      })
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        setFetchError('Erro de conexão ao carregar configurações');
+      })
+      .finally(() => {
+        if (!signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, []);
 
   const val = (key: string): string => {
     if (key in dirty) return String(dirty[key] ?? '');
@@ -193,16 +215,6 @@ export function Settings() {
     total: number; enriched: number; errors: number; pending: number;
   } | null>(null);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    fetch('/api/settings/enrichment-stats', { signal: controller.signal })
-      .then((r) => r.ok ? r.json() : null)
-      .then((d) => d && setEnrichmentStats(d))
-      .catch((err) => {
-        if (err instanceof DOMException && err.name === 'AbortError') return;
-      });
-    return () => controller.abort();
-  }, []);
 
   const hasDirty = Object.keys(dirty).length > 0;
 

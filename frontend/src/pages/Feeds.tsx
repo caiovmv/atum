@@ -72,35 +72,29 @@ export function Feeds() {
 
   useEffect(() => {
     const controller = new AbortController();
+    const signal = controller.signal;
     setLoading(true);
-    fetch('/api/feeds', { signal: controller.signal })
-      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
-      .then((data) => setFeeds(Array.isArray(data) ? data : []))
-      .catch((err) => {
-        if (err instanceof DOMException && err.name === 'AbortError') return;
-        setFeeds([]);
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
-  }, []);
-
-  useEffect(() => {
-    const controller = new AbortController();
     setPendingLoading(true);
-    fetch('/api/feeds/pending', { signal: controller.signal })
-      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
-      .then((data) => {
-        setPending(Array.isArray(data) ? data : []);
+    Promise.all([
+      fetch('/api/feeds', { signal }).then((r) => (r.ok ? r.json() : [])),
+      fetch('/api/feeds/pending', { signal }).then((r) => (r.ok ? r.json() : [])),
+    ])
+      .then(([feedsData, pendingData]) => {
+        if (signal.aborted) return;
+        setFeeds(Array.isArray(feedsData) ? feedsData : []);
+        setPending(Array.isArray(pendingData) ? pendingData : []);
         setSelectedPending(new Set());
       })
       .catch((err) => {
         if (err instanceof DOMException && err.name === 'AbortError') return;
+        setFeeds([]);
         setPending([]);
       })
       .finally(() => {
-        if (!controller.signal.aborted) setPendingLoading(false);
+        if (!signal.aborted) {
+          setLoading(false);
+          setPendingLoading(false);
+        }
       });
     return () => controller.abort();
   }, []);
@@ -188,8 +182,7 @@ export function Feeds() {
     try {
       const res = await fetch(`/api/feeds/${id}`, { method: 'DELETE' });
       if (!res.ok) return;
-      await fetchFeeds();
-      await fetchPending();
+      await Promise.all([fetchFeeds(), fetchPending()]);
       showToastMessage('Feed removido.');
     } catch {
       // ignore

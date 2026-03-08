@@ -280,9 +280,10 @@ graph TB
 | Módulo | Arquivo | Peso | Descrição |
 |--------|---------|------|-----------|
 | Audio Engine | `audio/audioEngine.ts` | **C** | Grafo Web Audio: Source → ATT → Volume → EQ (10 bandas) → Loudness → Balance → Analysers. Controla volume, balance, atenuação, bypass de EQ |
-| Analysis | `audio/analysis.ts` | **C** | Cálculo de RMS, pico dBFS, FFT, normalização VU/dBFS, loudness boost, inferência de qualidade |
+| Analysis | `audio/analysis.ts` | **C** | Cálculo de RMS, pico dBFS, FFT, normalização VU/dBFS, loudness boost, inferência de qualidade. Aceita buffers pré-alocados para evitar GC |
 | Spectral EQ | `audio/spectralEQ.ts` | **C** | `SpectralAnalyzer` com target curves (Harman, B&K, etc.), análise de referência, cálculo de correção |
-| Room EQ | `audio/roomEQ.ts` | **C** | `RoomEQSession`: geração de pink noise, captura via microfone, medição e correção acústica da sala |
+| Room EQ | `audio/roomEQ.ts` | **C** | `RoomEQSession`: geração de pink noise (via Web Worker), captura via microfone, medição e correção acústica da sala |
+| Pink Noise Worker | `audio/pinkNoise.worker.ts` | **C** | Web Worker: geração de pink noise off main thread (Voss-McCartney, ~264k amostras) |
 
 ### 5.5 Contextos (Estado Global)
 
@@ -291,13 +292,29 @@ graph TB
 | DownloadsEventsContext | `contexts/DownloadsEventsContext.tsx` | **A** | Lista de downloads via SSE (`/api/downloads/events`), `refetch()`, estado `reconnecting` |
 | ToastContext | `contexts/ToastContext.tsx` | **B** | `showToast()` com auto-dismiss, renderiza `ToastList` |
 
-### 5.6 Utilitários
+### 5.6 Utilitários e Hooks
 
 | Módulo | Arquivo | Peso | Descrição |
 |--------|---------|------|-----------|
 | Format | `utils/format.ts` | **B** | `formatFileSize(bytes)` (B→TB), `statusLabel(status)` (labels de status de download) |
+| useDebouncedValue | `hooks/useDebouncedValue.ts` | **B** | Hook genérico de debounce por delay configurável (usado em Library 350ms, Search 400ms) |
 
-### 5.7 Comunicação com Backend
+### 5.7 Concorrência e Performance
+
+| Padrão | Onde | Propósito |
+|--------|------|-----------|
+| `React.lazy` + `Suspense` | `App.tsx` | Code splitting: cada página é um chunk separado carregado sob demanda |
+| `Promise.all` | `Feeds.tsx` mount | Fetch paralelo de `/api/feeds` + `/api/feeds/pending` |
+| `Promise.all` | `Settings.tsx` mount | Fetch paralelo de `/api/settings` + `/api/settings/enrichment-stats` |
+| `Promise.all` | `Player.tsx`, `ReceiverPlayer.tsx` | Fetch paralelo de item + files |
+| `Promise.all` | `Library.tsx` facets (vídeos) | Fetch paralelo de facets movies + tv |
+| `AbortController` | Todas as páginas com fetch | Cancelamento de requests ao desmontar ou mudar deps |
+| `useDebouncedValue` | `Library.tsx` (busca), `Search.tsx` (filter-suggestions) | Debounce de 350-400ms evita fetch por tecla |
+| Web Worker | `pinkNoise.worker.ts` | Geração de pink noise (~264k iterações) off main thread |
+| RAF throttle ~30fps | `ReceiverPanel.tsx` loop de análise | Processa a cada 2 frames, reusa buffers, 1 setState consolidado |
+| SSE + visibility | Downloads, Library, Feeds, Wishlist, Notifications, Indexers | 6 canais de eventos em tempo real com reconexão e cleanup |
+
+### 5.8 Comunicação com Backend
 
 - **API REST:** fetch para `/api/*` (proxy via Vite em dev, nginx em produção)
 - **SSE (Server-Sent Events):** downloads, library, feeds, wishlist, indexers, notifications — 6 canais de eventos em tempo real

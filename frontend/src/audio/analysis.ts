@@ -19,8 +19,8 @@ export const DBFS_MAX = 0;
 export const DBFS_CENTER = -12;
 
 /** RMS → dBFS (full scale digital). Retorna valor em dB, tipicamente -Infinity a 0. */
-export function computeRMS_dBFS(analyser: AnalyserNode): number {
-  const buffer = new Float32Array(analyser.fftSize);
+export function computeRMS_dBFS(analyser: AnalyserNode, buf?: Float32Array): number {
+  const buffer = (buf ?? new Float32Array(analyser.fftSize)) as Float32Array<ArrayBuffer>;
   analyser.getFloatTimeDomainData(buffer);
   let sum = 0;
   for (let i = 0; i < buffer.length; i++) {
@@ -54,8 +54,8 @@ export function vuToNormalized(vu: number): number {
 }
 
 /** Pico no time domain → dBFS para Power Meter (-60 a 0). */
-export function computePeak_dBFS(analyser: AnalyserNode): number {
-  const buffer = new Float32Array(analyser.fftSize);
+export function computePeak_dBFS(analyser: AnalyserNode, buf?: Float32Array): number {
+  const buffer = (buf ?? new Float32Array(analyser.fftSize)) as Float32Array<ArrayBuffer>;
   analyser.getFloatTimeDomainData(buffer);
   let peak = 0;
   for (let i = 0; i < buffer.length; i++) {
@@ -79,8 +79,8 @@ export function dBFS_toNormalized(dBFS: number): number {
 }
 
 /** FFT para spectrum analyzer (byte frequency data). */
-export function computeFFT(analyser: AnalyserNode): Uint8Array {
-  const data = new Uint8Array(analyser.frequencyBinCount);
+export function computeFFT(analyser: AnalyserNode, buf?: Uint8Array): Uint8Array {
+  const data = (buf ?? new Uint8Array(analyser.frequencyBinCount)) as Uint8Array<ArrayBuffer>;
   analyser.getByteFrequencyData(data);
   return data;
 }
