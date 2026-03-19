@@ -1,6 +1,8 @@
 # Pasta de watch (magnets) e downloads locais — não subir para o GitHub
 torrents/
 downloads/
+# Exceção: pasta de componentes React com esse nome
+!frontend/src/components/downloads/
 
 # Ambiente e segredos
 .env
