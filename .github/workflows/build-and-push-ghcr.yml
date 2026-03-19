@@ -131,8 +131,13 @@ jobs:
           method: kubeconfig
           kubeconfig: ${{ secrets.KUBECONFIG }}
 
+      - name: Disable TLS verification (self-signed cert / Cloudflare Tunnel)
+        run: |
+          CLUSTER=$(kubectl config view --minify -o jsonpath='{.clusters[0].name}')
+          kubectl config set-cluster "$CLUSTER" --insecure-skip-tls-verify=true
+
       - name: Verify cluster connection
-        run: kubectl cluster-info
+        run: kubectl cluster-info --insecure-skip-tls-verify
 
       - name: Update image tags via Kustomize
         run: |
@@ -145,11 +150,11 @@ jobs:
             ghcr.io/caiovmv/atum-enrichment:${TAG}
 
       - name: Apply manifests
-        run: kubectl apply -k k8s/ --validate=false
+        run: kubectl apply -k k8s/ --insecure-skip-tls-verify
 
       - name: Wait for rollouts
         run: |
-          kubectl rollout status deployment/api -n atum --timeout=180s
-          kubectl rollout status deployment/runner -n atum --timeout=180s
-          kubectl rollout status deployment/frontend -n atum --timeout=180s
-          kubectl rollout status deployment/enrichment-daemon -n atum --timeout=120s
+          kubectl rollout status deployment/api -n atum --timeout=180s --insecure-skip-tls-verify
+          kubectl rollout status deployment/runner -n atum --timeout=180s --insecure-skip-tls-verify
+          kubectl rollout status deployment/frontend -n atum --timeout=180s --insecure-skip-tls-verify
+          kubectl rollout status deployment/enrichment-daemon -n atum --timeout=120s --insecure-skip-tls-verify
