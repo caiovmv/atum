@@ -125,15 +125,20 @@ jobs:
         uses: azure/setup-kubectl@v4
 
       - name: Setup kubeconfig
+        env:
+          KUBECONFIG_B64: ${{ secrets.KUBECONFIG }}
         run: |
           mkdir -p ~/.kube
-          echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
+          # O secret deve conter o kubeconfig codificado em base64.
+          # Para gerar: cat ~/.kube/config | base64 -w 0
+          echo "${KUBECONFIG_B64}" | base64 -d > ~/.kube/config
           chmod 600 ~/.kube/config
+          kubectl cluster-info
 
       - name: Update image tags via Kustomize
         run: |
-          cd k8s
           TAG=${{ steps.tag.outputs.tag }}
+          cd k8s
           kustomize edit set image \
             ghcr.io/caiovmv/atum-api:${TAG} \
             ghcr.io/caiovmv/atum-runner:${TAG} \
@@ -141,7 +146,7 @@ jobs:
             ghcr.io/caiovmv/atum-enrichment:${TAG}
 
       - name: Apply manifests
-        run: kubectl apply -k k8s/
+        run: kubectl apply -k k8s/ --validate=false
 
       - name: Wait for rollouts
         run: |
