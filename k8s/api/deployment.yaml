@@ -22,8 +22,8 @@ spec:
       containers:
         - name: api
           image: ghcr.io/caiovmv/atum-api:latest
-          entrypoint: ["/app/docker/entrypoint-api.sh"]
-          command: ["uvicorn", "app.web.app:app", "--host", "0.0.0.0", "--port", "8000"]
+          command: ["/app/docker/entrypoint-api.sh"]
+          args: ["uvicorn", "app.web.app:app", "--host", "0.0.0.0", "--port", "8000"]
           ports:
             - containerPort: 8000
               name: http
