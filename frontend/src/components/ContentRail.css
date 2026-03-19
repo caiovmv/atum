@@ -1,0 +1,237 @@
+.content-rail {
+  margin-bottom: 2rem;
+}
+
+.content-rail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.content-rail-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--atum-text);
+}
+
+.content-rail-link {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--atum-text-muted);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.content-rail-link:hover {
+  color: var(--atum-accent);
+}
+
+.content-rail-scroll-wrap {
+  position: relative;
+}
+
+.content-rail-row {
+  display: flex;
+  gap: 1rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--atum-card-hover) transparent;
+}
+
+.content-rail-row::-webkit-scrollbar {
+  height: 6px;
+}
+
+.content-rail-row::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.content-rail-row::-webkit-scrollbar-thumb {
+  background: var(--atum-card-hover);
+  border-radius: 3px;
+}
+
+.content-rail-card-wrap {
+  flex: 0 0 150px;
+  scroll-snap-align: start;
+}
+
+.content-rail-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--atum-text);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: transform 0.2s;
+  width: 100%;
+}
+
+.content-rail-card:hover {
+  transform: translateY(-3px);
+}
+
+.content-rail-card:focus-visible {
+  outline: 2px solid var(--atum-accent);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+.content-rail-card-cover {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--atum-card);
+  margin-bottom: 0.5rem;
+}
+
+.content-rail-card-cover .cover-image,
+.content-rail-card-cover .cover-image--card {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  margin: 0;
+  aspect-ratio: unset;
+}
+
+.content-rail-card-badge {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--atum-vfd-ob-7);
+  color: var(--atum-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+
+.content-rail-card-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.85);
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--atum-accent);
+  color: var(--atum-text-on-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s, transform 0.2s;
+  box-shadow: 0 4px 12px var(--atum-shadow-card);
+}
+
+.content-rail-card:hover .content-rail-card-play {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.content-rail-card-title {
+  font-weight: 600;
+  font-size: 0.85rem;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  width: 100%;
+}
+
+.content-rail-card-sub {
+  font-size: 0.75rem;
+  color: var(--atum-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+}
+
+@media (min-width: 1024px) {
+  .content-rail-card-title {
+    font-size: 0.85rem;
+  }
+}
+
+@media (max-width: 599px) {
+  .content-rail-card-title {
+    font-size: 0.8rem;
+  }
+}
+
+.content-rail-arrow {
+  display: none;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: var(--atum-accent);
+  color: var(--atum-text-on-accent);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 12px var(--atum-accent-scale);
+  transition: background 0.15s, box-shadow 0.15s;
+}
+
+.content-rail-arrow:hover {
+  background: var(--atum-accent-hover);
+  box-shadow: 0 0 18px var(--atum-accent-text);
+}
+
+.content-rail-arrow--left {
+  left: -12px;
+}
+
+.content-rail-arrow--right {
+  right: -12px;
+}
+
+@media (min-width: 1024px) {
+  .content-rail-arrow {
+    display: flex;
+  }
+
+  .content-rail-card-wrap {
+    flex: 0 0 170px;
+  }
+}
+
+@media (min-width: 600px) and (max-width: 1023px) {
+  .content-rail-card-wrap {
+    flex: 0 0 155px;
+  }
+}
+
+@media (max-width: 599px) {
+  .content-rail-title {
+    font-size: 1.1rem;
+  }
+
+  .content-rail-card-wrap {
+    flex: 0 0 130px;
+  }
+}

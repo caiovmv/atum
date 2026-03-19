@@ -1,0 +1,217 @@
+.playlists-page {
+  padding: 1.5rem;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.playlists-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.playlists-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.playlists-create-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 8px;
+  background: var(--atum-accent);
+  color: var(--atum-fg);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.playlists-create-btn:hover { opacity: 0.85; }
+
+.playlists-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 1.25rem;
+  border-bottom: 1px solid var(--atum-border);
+  padding-bottom: 0.5rem;
+  overflow-x: auto;
+}
+
+.playlists-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.75rem;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--atum-text-muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+.playlists-tab:hover { background: var(--atum-overlay-light); color: var(--atum-text); }
+.playlists-tab--active {
+  background: var(--atum-accent);
+  color: var(--atum-fg);
+}
+
+.playlists-create-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  border: 1px solid var(--atum-border);
+  border-radius: 10px;
+  background: var(--atum-surface);
+}
+
+.playlists-create-mode-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 0.25rem;
+}
+
+.playlists-create-mode-tab {
+  padding: 0.35rem 0.65rem;
+  border: 1px solid var(--atum-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--atum-text-muted);
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.playlists-create-mode-tab:hover { border-color: var(--atum-accent); color: var(--atum-text); }
+.playlists-create-mode-tab--active {
+  background: var(--atum-accent);
+  border-color: var(--atum-accent);
+  color: var(--atum-fg);
+}
+
+.playlists-create-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.playlists-create-rules { margin-top: 0.25rem; }
+.playlists-create-rules-label { font-size: 0.8rem; color: var(--atum-text-muted); margin: 0 0 0.4rem; }
+.playlists-create-rule {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 0.35rem;
+  align-items: center;
+}
+.playlists-create-rule select,
+.playlists-create-rule input {
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--atum-border);
+  border-radius: 6px;
+  background: var(--atum-surface);
+  color: var(--atum-text);
+  font-size: 0.8rem;
+  flex: 1;
+}
+.playlists-create-rule button {
+  background: transparent;
+  border: none;
+  color: var(--atum-text-muted);
+  cursor: pointer;
+  font-size: 1.1rem;
+  padding: 0 0.3rem;
+}
+.playlists-create-rule-btns {
+  display: flex;
+  gap: 0.5rem;
+}
+.playlists-create-rule-btns button {
+  background: transparent;
+  border: 1px dashed var(--atum-border);
+  border-radius: 6px;
+  padding: 0.25rem 0.6rem;
+  color: var(--atum-accent);
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.playlists-create-prompt {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--atum-border);
+  border-radius: 8px;
+  background: var(--atum-surface);
+  color: var(--atum-text);
+  font-size: 0.85rem;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.playlists-create-input {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--atum-border);
+  border-radius: 8px;
+  background: var(--atum-surface);
+  color: var(--atum-text);
+  font-size: 0.9rem;
+}
+
+.playlists-loading {
+  color: var(--atum-text-muted);
+  text-align: center;
+  padding: 3rem 0;
+}
+
+.playlists-skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 0.75rem;
+  padding: 1rem 0;
+}
+
+/* Grid de coleções igual ao de álbuns da biblioteca */
+.playlists-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 0.75rem;
+}
+
+.playlists-grid .media-card {
+  padding: 0.5rem;
+}
+
+.playlists-grid .media-card-title {
+  font-size: 0.85rem;
+  margin-bottom: 0.35rem;
+}
+
+.playlists-grid .media-card-meta {
+  font-size: 0.75rem;
+  margin-bottom: 0.5rem;
+  gap: 0.35rem;
+}
+
+.playlists-grid .media-card-cover-wrap {
+  margin-bottom: 0.5rem;
+  border-radius: 6px;
+}
+
+.playlists-grid .media-card-cover-hover-action .media-card-play-btn {
+  width: 40px;
+  height: 40px;
+}
+
+/* Ícones do overlay (badge) sobre a capa — cores do tema */
+.playlist-card-icon { color: var(--atum-accent); }
+.playlist-card-icon--fav { color: var(--atum-error); }
+.playlist-card-icon--top { color: var(--atum-warning); }
+.playlist-card-icon--radio { color: var(--atum-accent); }
+.playlist-card-icon--ai { color: var(--atum-accent); }

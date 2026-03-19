@@ -1,0 +1,63 @@
+.pwa-update-prompt {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: calc(var(--z-toast) + 1);
+  padding: var(--space-2) var(--space-4);
+  padding-bottom: calc(var(--space-2) + var(--safe-bottom));
+  background: var(--atum-card);
+  border-top: 1px solid var(--atum-border);
+  box-shadow: 0 -4px 20px var(--shadow-lg);
+}
+
+.pwa-update-prompt-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.pwa-update-prompt-content {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.pwa-update-prompt-icon {
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  color: var(--atum-accent);
+}
+
+.pwa-update-prompt-title {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--atum-text);
+}
+
+.pwa-update-prompt-desc {
+  margin: 0.15rem 0 0;
+  font-size: var(--text-sm);
+  color: var(--atum-text-muted);
+}
+
+.pwa-update-prompt-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.pwa-update-prompt-later {
+  white-space: nowrap;
+}
+
+.pwa-update-prompt-reload {
+  white-space: nowrap;
+}

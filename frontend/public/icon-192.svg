@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <rect width="192" height="192" rx="24" fill="#0a0a0a"/>
+  <rect x="4" y="4" width="184" height="184" rx="20" fill="none" stroke="rgba(0,229,200,0.15)" stroke-width="2"/>
+  <text x="96" y="108" text-anchor="middle" font-family="'Orbitron', system-ui, sans-serif" font-size="42" font-weight="600" letter-spacing="0.15em" fill="#00e5c8">
+    ATUM
+  </text>
+  <text x="96" y="132" text-anchor="middle" font-family="'Barlow', system-ui, sans-serif" font-size="14" font-weight="500" letter-spacing="0.12em" fill="rgba(0,229,200,0.5)">
+    SRX-900
+  </text>
+</svg>

@@ -1,19 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useToast } from '../contexts/ToastContext';
+import { getTmdbDetail, addFromSearch } from '../api/detail';
+import { Skeleton } from '../components/Skeleton';
+import type { TmdbDetail } from '../api/detail';
+import type { SearchResult } from '../types/search';
 import './Detail.css';
-
-interface SearchResult {
-  title: string;
-  quality_label: string;
-  seeders: number;
-  leechers: number;
-  size: string;
-  size_bytes: number;
-  torrent_id: string;
-  indexer: string;
-  magnet: string | null;
-}
 
 interface SearchParams {
   query: string;
@@ -27,21 +19,6 @@ interface DetailState {
   result: SearchResult;
   searchParams: SearchParams;
   originalIndex: number;
-}
-
-interface TmdbDetail {
-  id: number;
-  title: string;
-  overview: string;
-  genres: string[];
-  runtime?: number;
-  release_date?: string | null;
-  first_air_date?: string | null;
-  number_of_seasons?: number;
-  number_of_episodes?: number;
-  vote_average?: number;
-  poster_url: string | null;
-  backdrop_url: string | null;
 }
 
 const INDEXER_LABELS: Record<string, string> = {
@@ -74,16 +51,8 @@ export function Detail() {
     const controller = new AbortController();
     setTmdbLoading(true);
     setTmdbError(null);
-    const params = new URLSearchParams({
-      title: result.title,
-      content_type: contentType,
-    });
-    fetch(`/api/tmdb-detail?${params}`, { signal: controller.signal })
-      .then((r) => {
-        if (!r.ok) throw new Error(r.status === 404 ? 'Não encontrado no TMDB' : r.statusText);
-        return r.json();
-      })
-      .then((data) => setTmdb(data))
+    getTmdbDetail(result.title, contentType, { signal: controller.signal })
+      .then(setTmdb)
       .catch((err) => {
         if (err instanceof DOMException && err.name === 'AbortError') return;
         setTmdbError(err instanceof Error ? err.message : 'Erro');
@@ -96,21 +65,12 @@ export function Detail() {
     if (!state) return;
     setAdding(true);
     try {
-      const res = await fetch('/api/add-from-search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: state.searchParams.query.trim(),
-          limit: state.searchParams.limit,
-          sort_by: state.searchParams.sort_by,
-          content_type: state.searchParams.content_type,
-          music_category_only: state.searchParams.music_category_only,
-          indices: [state.originalIndex],
-          start_now: true,
-        }),
+      const data = await addFromSearch({
+        ...state.searchParams,
+        query: state.searchParams.query.trim(),
+        indices: [state.originalIndex],
+        start_now: true,
       });
-      if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
       if (data.errors?.length) {
         showToast('Falha: ' + data.errors.join('; '), 6000);
       } else if (data.added?.length) {
@@ -160,7 +120,18 @@ export function Detail() {
       </header>
 
       <main className="detail-main">
-        {isMovieOrTv && tmdbLoading && <p className="detail-loading">Carregando detalhes…</p>}
+        {isMovieOrTv && tmdbLoading && (
+            <div className="detail-tmdb-skeleton" aria-busy="true">
+              <div className="detail-tmdb-skeleton-content">
+                <Skeleton width="120px" height="180px" borderRadius="8px" />
+                <div className="detail-tmdb-skeleton-meta">
+                  <Skeleton width="80%" height="1.5rem" borderRadius="4px" />
+                  <Skeleton width="60%" height="0.9rem" borderRadius="4px" className="detail-tmdb-skeleton-line" />
+                  <Skeleton width="40%" height="0.9rem" borderRadius="4px" />
+                </div>
+              </div>
+            </div>
+          )}
         {isMovieOrTv && tmdbError && <p className="detail-error">{tmdbError}</p>}
 
         {isMovieOrTv && tmdb && (

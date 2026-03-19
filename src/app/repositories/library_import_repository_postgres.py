@@ -5,6 +5,7 @@ from __future__ import annotations
 from ..db_postgres import connection_postgres
 
 _UNSET = object()  # sentinel para distinguir "não fornecido" de None explícito
+_DEFAULT_LIMIT = 5000
 
 
 def _row_to_dict(row: dict) -> dict:
@@ -69,7 +70,7 @@ class LibraryImportRepositoryPostgres:
                        RETURNING id""",
                     (
                         content_path,
-                        content_type if content_type in ("music", "movies", "tv") else "music",
+                        content_type if content_type in ("music", "movies", "tv", "concerts") else "music",
                         name,
                         year,
                         meta,
@@ -95,8 +96,12 @@ class LibraryImportRepositoryPostgres:
         q: str | None = None,
         mood: str | None = None,
         sub_genre: str | None = None,
+        descriptor: str | None = None,
         bpm_min: float | None = None,
         bpm_max: float | None = None,
+        folder_path: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
     ) -> list[dict]:
         sel = """SELECT id, content_path, content_type, name, year, metadata_json,
                          cover_path_small, cover_path_large, artist, album, genre, tags,
@@ -106,11 +111,12 @@ class LibraryImportRepositoryPostgres:
                          record_label, release_type, overview, vote_average,
                          runtime_minutes, backdrop_path, original_title, tmdb_genres,
                          enriched_at, enrichment_sources,
+                         user_edited_at, cover_source,
                          created_at, updated_at
                   FROM library_imports"""
         conditions: list[str] = []
         params: list[object] = []
-        if content_type and content_type.strip().lower() in ("music", "movies", "tv"):
+        if content_type and content_type.strip().lower() in ("music", "movies", "tv", "concerts"):
             conditions.append("content_type = %s")
             params.append(content_type.strip().lower())
         if artist and artist.strip():
@@ -130,26 +136,46 @@ class LibraryImportRepositoryPostgres:
                 conditions.append("(" + " OR ".join(or_parts) + ")")
                 params.extend(json.dumps([t]) for t in tags_clean)
         if q and q.strip():
-            like = f"%{q.strip()}%"
-            conditions.append(
-                "(name ILIKE %s OR COALESCE(artist,'') ILIKE %s OR COALESCE(album,'') ILIKE %s)"
-            )
-            params.extend([like, like, like])
+            terms = q.strip().split()
+            tsquery = " & ".join(t + ":*" for t in terms if t)
+            conditions.append("search_vector @@ to_tsquery('simple', %s)")
+            params.append(tsquery)
         if mood and mood.strip():
             conditions.append("moods @> %s::text[]")
             params.append([mood.strip()])
         if sub_genre and sub_genre.strip():
             conditions.append("sub_genres @> %s::text[]")
             params.append([sub_genre.strip()])
+        if descriptor and descriptor.strip():
+            conditions.append("descriptors @> %s::text[]")
+            params.append([descriptor.strip()])
         if bpm_min is not None:
             conditions.append("bpm >= %s")
             params.append(bpm_min)
         if bpm_max is not None:
             conditions.append("bpm <= %s")
             params.append(bpm_max)
+        if folder_path and folder_path.strip():
+            fp = folder_path.strip().replace("\\", "/").rstrip("/")
+            conditions.append(
+                "regexp_replace(regexp_replace(content_path, '\\\\', '/'), '/[^/]+$', '') = %s"
+            )
+            params.append(fp)
         if conditions:
             sel += " WHERE " + " AND ".join(conditions)
-        sel += " ORDER BY content_type, name"
+        has_fts = q and q.strip()
+        if has_fts:
+            sel += " ORDER BY ts_rank(search_vector, to_tsquery('simple', %s)) DESC, name"
+            terms = q.strip().split()
+            params.append(" & ".join(t + ":*" for t in terms if t))
+        else:
+            sel += " ORDER BY content_type, name"
+        effective_limit = limit if limit is not None and limit > 0 else _DEFAULT_LIMIT
+        sel += " LIMIT %s"
+        params.append(effective_limit)
+        if offset is not None and offset > 0:
+            sel += " OFFSET %s"
+            params.append(offset)
         with connection_postgres(self._database_url) as conn:
             with conn.cursor() as cur:
                 cur.execute(sel, params or None)
@@ -184,6 +210,7 @@ class LibraryImportRepositoryPostgres:
                               record_label, release_type, overview, vote_average,
                               runtime_minutes, backdrop_path, original_title, tmdb_genres,
                               enriched_at, enrichment_sources,
+                              user_edited_at, cover_source,
                               created_at, updated_at
                        FROM library_imports WHERE id = %s""",
                     (import_id,),
@@ -192,6 +219,47 @@ class LibraryImportRepositoryPostgres:
         if not row:
             return None
         return _row_to_dict(dict(row))
+
+    def get_existing_content_paths(self, content_paths: list[str]) -> set[str]:
+        """Return the subset of content_paths that already exist in library_imports."""
+        if not content_paths:
+            return set()
+        with connection_postgres(self._database_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT content_path FROM library_imports WHERE content_path = ANY(%s)",
+                    (content_paths,),
+                )
+                return {row["content_path"] for row in cur.fetchall()}
+
+    def add_batch(
+        self,
+        items: list[tuple[str, str, str]],
+    ) -> list[tuple[int, str, str, str]]:
+        """Bulk insert (content_path, content_type, name) tuples via multi-row INSERT.
+        Returns list of (id, content_path, content_type, name) for successfully inserted rows."""
+        if not items:
+            return []
+        sanitised = [
+            (cp, ct if ct in ("music", "movies", "tv", "concerts") else "music", n)
+            for cp, ct, n in items
+        ]
+        placeholders = ",".join(["(%s, %s, %s, '[]'::jsonb)"] * len(sanitised))
+        flat_params: list[object] = []
+        for cp, ct, n in sanitised:
+            flat_params.extend([cp, ct, n])
+        with connection_postgres(self._database_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""INSERT INTO library_imports (content_path, content_type, name, tags)
+                        VALUES {placeholders}
+                        ON CONFLICT (content_path) DO NOTHING
+                        RETURNING id, content_path, content_type, name""",
+                    flat_params,
+                )
+                results = [(r["id"], r["content_path"], r["content_type"], r["name"]) for r in cur.fetchall()]
+                conn.commit()
+                return results
 
     def get_by_content_path(self, content_path: str) -> dict | None:
         with connection_postgres(self._database_url) as conn:
@@ -205,6 +273,7 @@ class LibraryImportRepositoryPostgres:
                               record_label, release_type, overview, vote_average,
                               runtime_minutes, backdrop_path, original_title, tmdb_genres,
                               enriched_at, enrichment_sources,
+                              user_edited_at, cover_source,
                               created_at, updated_at
                        FROM library_imports WHERE content_path = %s""",
                     (content_path,),
@@ -230,7 +299,8 @@ class LibraryImportRepositoryPostgres:
                               SET enrichment_error = %s, updated_at = CURRENT_TIMESTAMP
                             WHERE id IN (
                               SELECT id FROM library_imports
-                              WHERE (enriched_at IS NULL AND enrichment_error IS NULL)
+                              WHERE user_edited_at IS NULL
+                                 AND ((enriched_at IS NULL AND enrichment_error IS NULL)
                                  OR (enrichment_error IS NOT NULL
                                      AND enrichment_error != %s
                                      AND COALESCE(enriched_at, '1970-01-01'::timestamptz)
@@ -254,9 +324,10 @@ class LibraryImportRepositoryPostgres:
                               SET enrichment_error = %s, updated_at = CURRENT_TIMESTAMP
                             WHERE id IN (
                               SELECT id FROM library_imports
-                              WHERE (enriched_at IS NULL AND enrichment_error IS NULL)
+                              WHERE user_edited_at IS NULL
+                                AND ((enriched_at IS NULL AND enrichment_error IS NULL)
                                  OR (enrichment_error = %s
-                                     AND updated_at < NOW() - INTERVAL '1 minute' * %s)
+                                     AND updated_at < NOW() - INTERVAL '1 minute' * %s))
                               ORDER BY created_at ASC
                               LIMIT %s
                               FOR UPDATE SKIP LOCKED
@@ -312,6 +383,8 @@ class LibraryImportRepositoryPostgres:
         enriched_at: str | None = _UNSET,
         enrichment_sources: list[str] | None = None,
         enrichment_error: str | None = _UNSET,
+        user_edited_at: str | None = _UNSET,
+        cover_source: str | None = None,
     ) -> bool:
         import json
         updates = []
@@ -424,6 +497,12 @@ class LibraryImportRepositoryPostgres:
         if enrichment_error is not _UNSET:
             updates.append("enrichment_error = %s")
             params.append(enrichment_error)
+        if user_edited_at is not _UNSET:
+            updates.append("user_edited_at = %s")
+            params.append(user_edited_at)
+        if cover_source is not None:
+            updates.append("cover_source = %s")
+            params.append(cover_source)
         if not updates:
             return True
         params.append(import_id)
@@ -437,78 +516,90 @@ class LibraryImportRepositoryPostgres:
                 return cur.rowcount > 0
 
     def get_facets(self, content_type: str | None = None) -> dict:
-        """Retorna listas de valores distintos para artist, album, genre (e tags) para filtrar/agrupar.
-        Para music: artists, albums, genres. Para movies/tv: genres. Inclui tags em todos."""
-        import json
+        """Retorna listas de valores distintos para artist, album, genre, tags, moods, sub_genres.
+        Usa uma única query com sub-selects para reduzir round-trips ao banco."""
         with connection_postgres(self._database_url) as conn:
             with conn.cursor() as cur:
-                where = " WHERE 1=1"
+                where = "WHERE 1=1"
                 params: list = []
-                if content_type and content_type.strip().lower() in ("music", "movies", "tv"):
+                if content_type and content_type.strip().lower() in ("music", "movies", "tv", "concerts"):
                     where += " AND content_type = %s"
                     params.append(content_type.strip().lower())
-                artists, albums, genres, all_tags = [], [], [], []
-                cur.execute(
-                    """SELECT DISTINCT TRIM(artist) AS v FROM library_imports
-                       """ + where + """ AND TRIM(COALESCE(artist, '')) != '' ORDER BY 1""",
-                    params or None,
-                )
-                artists = [r["v"] for r in cur.fetchall()]
-                cur.execute(
-                    """SELECT DISTINCT TRIM(album) AS v FROM library_imports
-                       """ + where + """ AND TRIM(COALESCE(album, '')) != '' ORDER BY 1""",
-                    params or None,
-                )
-                albums = [r["v"] for r in cur.fetchall()]
-                cur.execute(
-                    """SELECT DISTINCT TRIM(genre) AS v FROM library_imports
-                       """ + where + """ AND TRIM(COALESCE(genre, '')) != '' ORDER BY 1""",
-                    params or None,
-                )
-                genres = [r["v"] for r in cur.fetchall()]
-                cur.execute(
-                    """SELECT tags FROM library_imports""" + where,
-                    params or None,
-                )
-                seen = set()
-                for r in cur.fetchall():
-                    t = r.get("tags")
-                    if isinstance(t, list):
-                        for x in t:
-                            if isinstance(x, str) and x.strip() and x.strip() not in seen:
-                                seen.add(x.strip())
-                                all_tags.append(x.strip())
-                    elif isinstance(t, str):
-                        try:
-                            arr = json.loads(t) if t else []
-                            for x in arr:
-                                if isinstance(x, str) and x.strip() and x.strip() not in seen:
-                                    seen.add(x.strip())
-                                    all_tags.append(x.strip())
-                        except (ValueError, TypeError):
-                            pass
-                all_tags.sort()
 
-                # Enrichment facets: moods and sub_genres (Postgres text[] columns)
-                all_moods: list[str] = []
-                all_sub_genres: list[str] = []
                 cur.execute(
-                    """SELECT DISTINCT unnest(moods) AS v FROM library_imports"""
-                    + where + """ AND moods IS NOT NULL ORDER BY 1""",
-                    params or None,
+                    f"""
+                    SELECT
+                        (SELECT COALESCE(array_agg(v ORDER BY v), ARRAY[]::text[])
+                         FROM (SELECT DISTINCT TRIM(artist) AS v FROM library_imports {where}
+                               AND TRIM(COALESCE(artist, '')) != '') sub) AS artists,
+                        (SELECT COALESCE(array_agg(v ORDER BY v), ARRAY[]::text[])
+                         FROM (SELECT DISTINCT TRIM(album) AS v FROM library_imports {where}
+                               AND TRIM(COALESCE(album, '')) != '') sub) AS albums,
+                        (SELECT COALESCE(array_agg(v ORDER BY v), ARRAY[]::text[])
+                         FROM (SELECT DISTINCT TRIM(genre) AS v FROM library_imports {where}
+                               AND TRIM(COALESCE(genre, '')) != '') sub) AS genres,
+                        (SELECT COALESCE(array_agg(DISTINCT v ORDER BY v), ARRAY[]::text[])
+                         FROM (SELECT jsonb_array_elements_text(tags) AS v FROM library_imports {where}
+                               AND tags IS NOT NULL AND tags != '[]'::jsonb) sub
+                         WHERE TRIM(v) != '') AS tags,
+                        (SELECT COALESCE(array_agg(DISTINCT v ORDER BY v), ARRAY[]::text[])
+                         FROM (SELECT unnest(moods) AS v FROM library_imports {where}
+                               AND moods IS NOT NULL) sub
+                         WHERE v IS NOT NULL) AS moods,
+                        (SELECT COALESCE(array_agg(DISTINCT v ORDER BY v), ARRAY[]::text[])
+                         FROM (SELECT unnest(sub_genres) AS v FROM library_imports {where}
+                               AND sub_genres IS NOT NULL) sub
+                         WHERE v IS NOT NULL) AS sub_genres,
+                        (SELECT COALESCE(array_agg(DISTINCT v ORDER BY v), ARRAY[]::text[])
+                         FROM (SELECT unnest(descriptors) AS v FROM library_imports {where}
+                               AND descriptors IS NOT NULL) sub
+                         WHERE v IS NOT NULL) AS descriptors
+                    """,
+                    params * 7 if params else None,
                 )
-                all_moods = [r["v"] for r in cur.fetchall() if r.get("v")]
-                cur.execute(
-                    """SELECT DISTINCT unnest(sub_genres) AS v FROM library_imports"""
-                    + where + """ AND sub_genres IS NOT NULL ORDER BY 1""",
-                    params or None,
-                )
-                all_sub_genres = [r["v"] for r in cur.fetchall() if r.get("v")]
-
+                row = cur.fetchone()
+        if not row:
+            return {"artists": [], "albums": [], "genres": [], "tags": [], "moods": [], "sub_genres": [], "descriptors": []}
         return {
-            "artists": artists, "albums": albums, "genres": genres, "tags": all_tags,
-            "moods": all_moods, "sub_genres": all_sub_genres,
+            "artists": list(row["artists"] or []),
+            "albums": list(row["albums"] or []),
+            "genres": list(row["genres"] or []),
+            "tags": list(row["tags"] or []),
+            "moods": list(row["moods"] or []),
+            "sub_genres": list(row["sub_genres"] or []),
+            "descriptors": list(row["descriptors"] or []),
         }
+
+    def list_folders(self, content_type: str | None = None) -> list[dict]:
+        """Retorna pastas (dirname de content_path) com contagem. Cada entrada: {path, name, count}."""
+        where = "WHERE content_path IS NOT NULL AND TRIM(content_path) != ''"
+        params: list[object] = []
+        if content_type and content_type.strip().lower() in ("music", "movies", "tv", "concerts"):
+            where += " AND content_type = %s"
+            params.append(content_type.strip().lower())
+
+        with connection_postgres(self._database_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    SELECT parent AS path,
+                           COALESCE(NULLIF(regexp_replace(parent, '^.*/', ''), ''), parent) AS name,
+                           COUNT(*)::int AS count
+                    FROM (
+                        SELECT regexp_replace(regexp_replace(content_path, '\\\\', '/'), '/[^/]+$', '') AS parent
+                        FROM library_imports
+                        {where}
+                    ) sub
+                    WHERE parent != ''
+                    GROUP BY parent
+                    ORDER BY 2
+                    """,
+                    params,
+                )
+                return [
+                    {"path": r["path"], "name": r["name"] or r["path"], "count": r["count"]}
+                    for r in cur.fetchall()
+                ]
 
     def delete(self, import_id: int) -> bool:
         with connection_postgres(self._database_url) as conn:

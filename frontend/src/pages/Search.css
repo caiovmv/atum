@@ -34,14 +34,14 @@
   border: 1px solid var(--atum-border);
   background: var(--atum-card);
   color: var(--atum-text);
-  min-height: 48px;
+  min-height: var(--touch-target-comfortable);
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .search-hero-input:focus {
   outline: none;
   border-color: var(--atum-accent);
-  box-shadow: 0 0 0 2px rgba(29, 185, 84, 0.25);
+  box-shadow: 0 0 0 2px var(--atum-accent-25);
 }
 
 .search-hero-input::placeholder {
@@ -81,7 +81,7 @@
 .search-pill--active {
   background: var(--atum-accent);
   border-color: var(--atum-accent);
-  color: #000;
+  color: var(--atum-text-on-accent);
 }
 
 .search-pill--active:hover {
@@ -100,7 +100,7 @@
 }
 
 .search-hero-submit {
-  min-height: 44px;
+  min-height: var(--touch-target-min);
   padding: 0.5rem 1.25rem;
   border-radius: 24px;
 }
@@ -144,7 +144,7 @@
 }
 
 .search-error {
-  color: #e74c3c;
+  color: var(--atum-error);
   margin-bottom: 1rem;
 }
 
@@ -232,7 +232,7 @@
 }
 
 .search-progress-icon--error {
-  color: var(--atum-error, #e74c3c);
+  color: var(--atum-error);
 }
 
 .search-progress-indexer-name {
@@ -285,16 +285,6 @@
 .filter-check-disabled {
   opacity: 0.65;
   cursor: not-allowed;
-}
-
-.filter-select {
-  padding: 0.35rem 0.6rem;
-  border-radius: 999px;
-  border: 1px solid var(--atum-border);
-  background: var(--atum-card);
-  color: var(--atum-text);
-  font-size: 0.9rem;
-  min-width: 5rem;
 }
 
 .filter-name-input {
@@ -391,69 +381,9 @@
   gap: 0.5rem;
 }
 
-.result-card-actions .add-btn {
+.result-card-actions .atum-btn {
   flex: 1;
   min-width: 0;
-}
-
-.add-btn.secondary {
-  background: transparent;
-  border: 1px solid var(--atum-border);
-  color: var(--atum-text);
-}
-
-.add-btn.secondary:hover {
-  background: var(--atum-card-hover);
-}
-
-.search-files-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: 1rem;
-}
-
-.search-files-modal {
-  background: var(--atum-card);
-  border: 1px solid var(--atum-border);
-  border-radius: 8px;
-  max-width: 520px;
-  width: 100%;
-  max-height: 85vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.search-files-modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1rem 1.25rem;
-  border-bottom: 1px solid var(--atum-border);
-}
-
-.search-files-modal-header h2 {
-  margin: 0;
-  font-size: 1.1rem;
-}
-
-.search-files-modal-close {
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  color: var(--atum-text-muted);
-  cursor: pointer;
-  padding: 0 0.25rem;
-  line-height: 1;
-}
-
-.search-files-modal-body {
-  padding: 1rem 1.25rem;
-  overflow: auto;
 }
 
 .search-files-modal-loading,
@@ -463,10 +393,10 @@
 
 .search-files-modal-error-wrap .search-files-modal-error {
   margin: 0 0 0.75rem;
-  color: var(--atum-error, #e74c3c);
+  color: var(--atum-error);
 }
 
-.search-files-modal-error-wrap .add-btn {
+.search-files-modal-error-wrap .atum-btn {
   margin-top: 0.25rem;
 }
 
@@ -537,12 +467,8 @@
   border-top: 1px solid var(--atum-border);
 }
 
-.search-add-modal-footer .add-btn {
+.search-add-modal-footer .atum-btn {
   flex: 1;
-}
-
-.add-btn {
-  width: 100%;
 }
 
 .pagination {
@@ -611,7 +537,7 @@
     gap: 0.75rem;
   }
   .pagination-buttons button {
-    min-height: 44px;
+    min-height: var(--touch-target-min);
     padding: 0.5rem 1rem;
   }
 }

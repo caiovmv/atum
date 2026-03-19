@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
+import threading
+import time as _time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,6 +14,19 @@ from pathlib import Path
 import requests
 
 logger = logging.getLogger(__name__)
+
+# Global rate limiter for MusicBrainz API (max 1 req/s across all threads)
+_mb_lock = threading.Lock()
+_mb_last_call: float = 0.0
+
+
+def _musicbrainz_rate_limit() -> None:
+    global _mb_last_call
+    with _mb_lock:
+        elapsed = _time.monotonic() - _mb_last_call
+        if elapsed < 1.0:
+            _time.sleep(1.0 - elapsed)
+        _mb_last_call = _time.monotonic()
 
 AUDIO_EXTENSIONS = {".mp3", ".flac", ".m4a", ".ogg", ".wav", ".aiff", ".aac", ".opus", ".wma"}
 
@@ -100,6 +115,7 @@ def _enrich_musicbrainz(artist: str, album: str) -> dict:
         return {}
 
     try:
+        _musicbrainz_rate_limit()
         result = musicbrainzngs.search_release_groups(
             artist=artist, releasegroup=album, limit=5
         )
@@ -114,8 +130,7 @@ def _enrich_musicbrainz(artist: str, album: str) -> dict:
 
         label = None
         try:
-            import time
-            time.sleep(1)  # MusicBrainz rate limit: 1 req/s
+            _musicbrainz_rate_limit()
             releases = musicbrainzngs.browse_releases(
                 release_group=mb_id, includes=["labels"], limit=1
             )
@@ -151,7 +166,9 @@ def _enrich_musicbrainz(artist: str, album: str) -> dict:
 # ---------------------------------------------------------------------------
 
 def _enrich_lastfm_tags(artist: str, album: str) -> dict:
-    """Busca tags da comunidade no Last.fm."""
+    """Busca tags da comunidade no Last.fm (artist + album em paralelo)."""
+    from concurrent.futures import ThreadPoolExecutor
+
     from ..deps import get_settings_repo
 
     repo = get_settings_repo()
@@ -164,35 +181,39 @@ def _enrich_lastfm_tags(artist: str, album: str) -> dict:
     if not api_key or not artist:
         return {}
 
-    sub_genres: list[str] = []
-    descriptors: list[str] = []
+    def _fetch_artist_tags() -> tuple[list[str], list[str]]:
+        sg: list[str] = []
+        desc: list[str] = []
+        try:
+            r = requests.get(
+                "https://ws.audioscrobbler.com/2.0/",
+                params={
+                    "method": "artist.getTopTags",
+                    "artist": artist,
+                    "api_key": api_key,
+                    "format": "json",
+                },
+                timeout=10,
+            )
+            if r.status_code == 200:
+                data = r.json()
+                for tag in data.get("toptags", {}).get("tag", []):
+                    name = (tag.get("name") or "").strip().lower()
+                    count = int(tag.get("count", 0))
+                    if not name:
+                        continue
+                    if count >= 50:
+                        sg.append(name)
+                    elif count >= 20:
+                        desc.append(name)
+        except Exception as e:
+            logger.debug("Last.fm artist tags error: %s", e)
+        return sg, desc
 
-    try:
-        r = requests.get(
-            "https://ws.audioscrobbler.com/2.0/",
-            params={
-                "method": "artist.getTopTags",
-                "artist": artist,
-                "api_key": api_key,
-                "format": "json",
-            },
-            timeout=10,
-        )
-        if r.status_code == 200:
-            data = r.json()
-            for tag in data.get("toptags", {}).get("tag", []):
-                name = (tag.get("name") or "").strip().lower()
-                count = int(tag.get("count", 0))
-                if not name:
-                    continue
-                if count >= 50:
-                    sub_genres.append(name)
-                elif count >= 20:
-                    descriptors.append(name)
-    except Exception as e:
-        logger.debug("Last.fm artist tags error: %s", e)
-
-    if album:
+    def _fetch_album_tags() -> list[str]:
+        tags: list[str] = []
+        if not album:
+            return tags
         try:
             r = requests.get(
                 "https://ws.audioscrobbler.com/2.0/",
@@ -209,10 +230,23 @@ def _enrich_lastfm_tags(artist: str, album: str) -> dict:
                 data = r.json()
                 for tag in data.get("album", {}).get("tags", {}).get("tag", []):
                     name = (tag.get("name") or "").strip().lower()
-                    if name and name not in sub_genres and name not in descriptors:
-                        descriptors.append(name)
+                    if name:
+                        tags.append(name)
         except Exception as e:
             logger.debug("Last.fm album info error: %s", e)
+        return tags
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        f_artist = pool.submit(_fetch_artist_tags)
+        f_album = pool.submit(_fetch_album_tags)
+        sub_genres, descriptors = f_artist.result()
+        album_tags = f_album.result()
+
+    existing = set(sub_genres) | set(descriptors)
+    for name in album_tags:
+        if name not in existing:
+            descriptors.append(name)
+            existing.add(name)
 
     out: dict = {}
     if sub_genres:
@@ -394,6 +428,9 @@ def _analyze_audio_local(filepath: str) -> dict:
 
 def _enrich_with_llm(item: dict, features: dict, llm_client: object) -> dict:
     """Usa LLM para inferir moods e contextos de uso."""
+    from ..deps import get_settings_repo
+    from .prompts_registry import get_prompt_config
+
     artist = item.get("artist") or ""
     album = item.get("album") or ""
     genre = item.get("genre") or ""
@@ -404,29 +441,24 @@ def _enrich_with_llm(item: dict, features: dict, llm_client: object) -> dict:
     energy = features.get("energy")
     valence = features.get("valence")
 
-    prompt = (
+    user_content = (
         f"Artista: {artist}\n"
         f"Álbum: {album}\n"
-        f"Gênero: {genre}\n"
-        f"Sub-gêneros: {', '.join(sub_genres[:5]) if sub_genres else 'desconhecido'}\n"
-        f"Tags: {', '.join(descriptors[:5]) if descriptors else 'nenhuma'}\n"
-        f"BPM: {bpm or 'desconhecido'}, Key: {key or 'desconhecida'}, "
-        f"Energy: {energy or 'desconhecida'}, Valence: {valence or 'desconhecida'}\n\n"
-        "Com base nesses dados, retorne APENAS um JSON (sem texto extra) com:\n"
-        '{\n'
-        '  "moods": ["mood1", "mood2", ...],\n'
-        '  "descriptors": ["contexto1", "contexto2", ...],\n'
-        '  "sub_genres": ["subgenero1", "subgenero2", ...]\n'
-        '}\n'
-        "- moods: 3-5 moods em português (ex: melancólico, energético, contemplativo)\n"
-        "- descriptors: 2-3 contextos de uso em português (ex: para estudar, road trip)\n"
-        "- sub_genres: refine os sub-gêneros se possível (em inglês, lowercase)\n"
+        f"Gênero principal: {genre or 'desconhecido'}\n"
+        f"Sub-gêneros conhecidos: {', '.join(sub_genres[:5]) if sub_genres else 'nenhum'}\n"
+        f"Tags externas: {', '.join(descriptors[:5]) if descriptors else 'nenhuma'}\n"
+        f"BPM: {bpm or '?'} | Key: {key or '?'} | Energy: {energy or '?'} | Valence: {valence or '?'}"
     )
 
+    repo = get_settings_repo() or {"ai_prompts": {}}
+    config = get_prompt_config("enrichment", repo)
     try:
         data = llm_client.chat_json(
-            [{"role": "user", "content": prompt}],
-            temperature=0.2,
+            [
+                {"role": "system", "content": config["system"]},
+                {"role": "user", "content": user_content},
+            ],
+            temperature=config["temperature"],
         )
         out: dict = {}
         if isinstance(data.get("moods"), list):

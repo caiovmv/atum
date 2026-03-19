@@ -7,12 +7,31 @@ import urllib.parse
 import httpx
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 from ...deps import get_settings
+
+
+class AddDownloadBody(BaseModel):
+    magnet: str | None = None
+    torrent_url: str | None = None
+    name: str | None = None
+    content_type: str = "music"
+    start_now: bool = True
+    save_path: str | None = None
+    excluded_file_indices: list[int] | None = None
+    torrent_files: list[dict] | None = None
+
+
+class TorrentMetadataBody(BaseModel):
+    magnet: str | None = None
+    torrent_url: str | None = None
+
 
 router = APIRouter()
 
 _client: httpx.AsyncClient | None = None
+_stream_client: httpx.AsyncClient | None = None
 
 
 def _get_client() -> httpx.AsyncClient:
@@ -20,6 +39,16 @@ def _get_client() -> httpx.AsyncClient:
     if _client is None or _client.is_closed:
         _client = httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=10.0))
     return _client
+
+
+def _get_stream_client() -> httpx.AsyncClient:
+    """Client para SSE/streaming: sem read timeout (conexões de longa duração)."""
+    global _stream_client
+    if _stream_client is None or _stream_client.is_closed:
+        _stream_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(timeout=None, connect=10.0)
+        )
+    return _stream_client
 
 
 def _runner_url(path: str) -> str:
@@ -37,7 +66,7 @@ async def downloads_events(status: str | None = Query(None)):
     """SSE: proxy do stream de eventos de downloads do Runner (atualização ~1s)."""
     path = "/downloads/events" + ("?" + urllib.parse.urlencode({"status": status}) if status else "")
     url = _runner_url(path)
-    client = _get_client()
+    client = _get_stream_client()
     try:
         req = client.build_request("GET", url)
         resp = await client.send(req, stream=True)
@@ -83,12 +112,12 @@ async def list_downloads(status: str | None = Query(None)) -> list[dict]:
 
 
 @router.post("/downloads")
-async def add_download(body: dict) -> dict:
+async def add_download(body: AddDownloadBody) -> dict:
     """Adiciona download (proxy para o Runner)."""
     url = _runner_url("/downloads")
     client = _get_client()
     try:
-        r = await client.post(url, json=body)
+        r = await client.post(url, json=body.model_dump(exclude_none=True))
     except httpx.HTTPError as e:
         raise HTTPException(status_code=502, detail=f"Runner indisponível: {e}") from e
     if r.status_code != 200:
@@ -122,6 +151,20 @@ async def stop_download(download_id: int) -> dict:
     return r.json()
 
 
+@router.post("/downloads/{download_id}/retry")
+async def retry_download(download_id: int) -> dict:
+    """Re-tenta um download falhado (proxy para o Runner)."""
+    url = _runner_url(f"/downloads/{download_id}/retry")
+    client = _get_client()
+    try:
+        r = await client.post(url)
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=502, detail=f"Runner indisponível: {e}") from e
+    if r.status_code != 200:
+        raise HTTPException(status_code=r.status_code, detail=r.text)
+    return r.json()
+
+
 @router.delete("/downloads/{download_id}")
 async def delete_download(download_id: int, remove_files: bool = Query(False)) -> dict:
     qs = urllib.parse.urlencode({"remove_files": str(remove_files).lower()})
@@ -137,12 +180,12 @@ async def delete_download(download_id: int, remove_files: bool = Query(False)) -
 
 
 @router.post("/torrent/metadata")
-async def get_torrent_metadata(body: dict) -> dict:
+async def get_torrent_metadata(body: TorrentMetadataBody) -> dict:
     """Retorna nome e lista de arquivos do torrent (proxy para o Runner)."""
     url = _runner_url("/torrent/metadata")
     client = _get_client()
     try:
-        r = await client.post(url, json=body, timeout=httpx.Timeout(260.0, connect=10.0))
+        r = await client.post(url, json=body.model_dump(exclude_none=True), timeout=httpx.Timeout(260.0, connect=10.0))
         if r.status_code != 200:
             raise HTTPException(status_code=r.status_code, detail=r.text or "Erro no Runner")
         return r.json()

@@ -13,6 +13,24 @@
   margin-bottom: 1.5rem;
 }
 
+.atum-settings-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.atum-settings-skeleton .atum-settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.atum-settings-skeleton-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
 .atum-settings-section {
   background: var(--atum-card);
   border: 1px solid var(--atum-border);
@@ -59,30 +77,6 @@
 .atum-settings-hint {
   font-size: 0.78rem;
   color: var(--atum-muted);
-}
-
-.atum-settings-input {
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--atum-border);
-  border-radius: 6px;
-  background: var(--atum-bg);
-  color: var(--atum-text);
-  font-size: 0.9rem;
-}
-
-.atum-settings-input:focus {
-  outline: 2px solid var(--atum-accent);
-  outline-offset: 1px;
-}
-
-.atum-settings-select {
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--atum-border);
-  border-radius: 6px;
-  background: var(--atum-bg);
-  color: var(--atum-text);
-  font-size: 0.9rem;
-  cursor: pointer;
 }
 
 .atum-settings-toggle-wrap {
@@ -170,13 +164,13 @@
 }
 
 .atum-settings-integration-status--ok {
-  background: rgba(76, 175, 80, 0.15);
-  color: #4caf50;
+  background: var(--atum-success-bg);
+  color: var(--atum-success);
 }
 
 .atum-settings-integration-status--error {
-  background: rgba(244, 67, 54, 0.15);
-  color: #f44336;
+  background: var(--atum-error-bg);
+  color: var(--atum-error);
 }
 
 .atum-settings-actions {
@@ -194,13 +188,13 @@
 }
 
 .atum-settings-test-result--ok {
-  background: rgba(76, 175, 80, 0.1);
-  color: #4caf50;
+  background: var(--atum-success-bg-dim);
+  color: var(--atum-success);
 }
 
 .atum-settings-test-result--error {
-  background: rgba(244, 67, 54, 0.1);
-  color: #f44336;
+  background: var(--atum-error-bg-dim);
+  color: var(--atum-error);
 }
 
 .atum-settings-enrichment-stats {
@@ -225,18 +219,18 @@
 }
 
 .atum-settings-enrichment-stat--pending strong {
-  color: #ffa726;
+  color: var(--atum-warning);
 }
 
 .atum-settings-enrichment-stat--error strong {
-  color: #f44336;
+  color: var(--atum-error);
 }
 
 .atum-settings-notice {
   font-size: 0.82rem;
   color: var(--atum-muted);
-  background: rgba(255, 193, 7, 0.08);
-  border: 1px solid rgba(255, 193, 7, 0.25);
+  background: var(--atum-warning-bg);
+  border: 1px solid var(--atum-warning-border);
   border-radius: 6px;
   padding: 0.5rem 0.75rem;
   line-height: 1.5;
@@ -252,7 +246,7 @@
 
 .atum-settings-saved {
   font-size: 0.85rem;
-  color: #4caf50;
+  color: var(--atum-success);
   animation: atum-settings-fade 2s ease-out forwards;
 }
 
@@ -260,4 +254,162 @@
   0% { opacity: 1; }
   70% { opacity: 1; }
   100% { opacity: 0; }
+}
+
+@media (max-width: 599px) {
+  .atum-settings {
+    padding: 0 0.25rem 2rem;
+  }
+  .atum-settings-title {
+    font-size: 1.25rem;
+  }
+  .atum-settings-section {
+    padding: 1rem;
+    border-radius: 8px;
+  }
+  .atum-settings-field-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .atum-settings-integration-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .atum-settings-actions {
+    flex-direction: column;
+  }
+  .atum-settings-actions button {
+    width: 100%;
+  }
+  .atum-settings-enrichment-stats {
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+}
+
+.atum-settings-mb-1 {
+  margin-bottom: 1rem;
+}
+
+.atum-settings-mt-half {
+  margin-top: 0.5rem;
+}
+
+.atum-settings-stat-muted {
+  opacity: 0.6;
+}
+
+.atum-settings-reorg-result {
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+}
+
+.atum-settings-reorg-summary {
+  margin-bottom: 0.25rem;
+}
+
+.atum-settings-reorg-details {
+  margin-top: 0.5rem;
+}
+
+.atum-settings-reorg-details-summary {
+  cursor: pointer;
+  color: var(--atum-muted);
+}
+
+.atum-settings-reorg-pre {
+  margin-top: 0.25rem;
+  padding: 0.5rem;
+  background: var(--atum-bg);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  max-height: 200px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+/* System Prompts */
+.atum-settings-prompts-skeleton {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  gap: 1rem;
+}
+
+.atum-settings-prompts-skeleton .atum-settings-prompt-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.atum-settings-prompts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  gap: 1.25rem;
+}
+
+.atum-settings-prompt-card {
+  background: var(--atum-bg);
+  border: 1px solid var(--atum-border);
+  border-radius: 8px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.atum-settings-prompt-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.atum-settings-prompt-textarea {
+  resize: vertical;
+  min-height: 100px;
+  font-family: inherit;
+}
+
+.atum-settings-prompt-dry-result {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.atum-settings-prompt-dry-result summary {
+  cursor: pointer;
+  color: var(--atum-muted);
+}
+
+.atum-settings-prompt-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.atum-settings-prompt-msg {
+  padding: 0.5rem;
+  border-radius: 6px;
+  border-left: 3px solid var(--atum-border);
+}
+
+.atum-settings-prompt-msg--system {
+  background: var(--atum-msg-system);
+  border-left-color: var(--atum-muted);
+}
+
+.atum-settings-prompt-msg--user {
+  background: var(--atum-msg-user);
+  border-left-color: var(--atum-accent);
+}
+
+.atum-settings-prompt-msg--assistant {
+  background: var(--atum-msg-assistant);
+  border-left-color: var(--atum-success);
+}
+
+.atum-settings-prompt-msg pre {
+  margin: 0.25rem 0 0;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  word-break: break-word;
 }

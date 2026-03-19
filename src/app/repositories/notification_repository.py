@@ -19,9 +19,17 @@ def create(
     payload: dict | None = None,
     db_path=None,
 ) -> int:
-    """Insere uma notificação. Retorna o id. db_path ignorado."""
+    """Insere uma notificação e publica evento via Redis Pub/Sub. Retorna o id."""
     from .notification_repository_postgres import create as _pg_create
-    return _pg_create(type_, title, body, payload, _database_url())
+    nid = _pg_create(type_, title, body, payload, _database_url())
+    try:
+        from ..event_bus import CHANNEL_NOTIFICATIONS, publish
+        publish(CHANNEL_NOTIFICATIONS, {
+            "notification": {"id": nid, "type": type_, "title": title, "body": body or ""},
+        })
+    except Exception:
+        pass
+    return nid
 
 
 def list_notifications(

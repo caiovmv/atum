@@ -1,3 +1,29 @@
+.atum-skip-link {
+  position: absolute;
+  left: -9999px;
+  top: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  z-index: 9999;
+}
+.atum-skip-link:focus {
+  position: fixed;
+  top: 0.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: auto;
+  height: auto;
+  padding: 0.6rem 1.5rem;
+  background: var(--atum-accent);
+  color: var(--atum-text-on-accent);
+  font-weight: 600;
+  font-size: 0.85rem;
+  border-radius: 6px;
+  text-decoration: none;
+  box-shadow: var(--shadow-md);
+}
+
 .atum-layout {
   display: flex;
   min-height: 100vh;
@@ -13,8 +39,8 @@
   z-index: 1002;
   width: 2.75rem;
   height: 2.75rem;
-  min-width: 44px;
-  min-height: 44px;
+  min-width: var(--touch-target-min);
+  min-height: var(--touch-target-min);
   flex-direction: column;
   justify-content: center;
   align-items: center;
@@ -37,7 +63,7 @@
   display: none;
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--atum-overlay);
   z-index: 999;
   opacity: 0;
   pointer-events: none;
@@ -56,14 +82,55 @@
   padding: 1.5rem 0;
   border-right: 1px solid var(--atum-border);
   flex-shrink: 0;
+  transition: width 0.2s ease, min-width 0.2s ease;
+  overflow: hidden;
+}
+
+.atum-sidebar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1rem 1rem 1.5rem;
 }
 
 .atum-sidebar-brand {
   font-size: 1.5rem;
   font-weight: 700;
   color: var(--atum-text);
-  padding: 0 1.5rem 1.5rem;
   letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+.atum-sidebar-collapse-btn {
+  display: none;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--atum-text-muted);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: color 0.15s, background 0.15s;
+}
+
+.atum-sidebar-collapse-btn:hover {
+  color: var(--atum-accent);
+  background: var(--atum-card);
+}
+
+.atum-sidebar-brand--btn {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.15s;
+}
+
+.atum-sidebar-brand--btn:hover {
+  color: var(--atum-accent);
 }
 
 .atum-nav {
@@ -74,7 +141,7 @@
 
 .atum-nav-item {
   padding: 0.6rem 1.5rem;
-  min-height: 44px;
+  min-height: var(--touch-target-min);
   display: flex;
   align-items: center;
   color: var(--atum-text-muted);
@@ -133,8 +200,8 @@
   position: relative;
   width: 2.5rem;
   height: 2.5rem;
-  min-width: 44px;
-  min-height: 44px;
+  min-width: var(--touch-target-min);
+  min-height: var(--touch-target-min);
   padding: 0;
   border: 1px solid var(--atum-border);
   border-radius: 8px;
@@ -147,7 +214,7 @@
 }
 
 .atum-notifications-btn:hover {
-  background: var(--atum-hover, #333);
+  background: var(--atum-hover);
 }
 
 .atum-notifications-icon {
@@ -167,8 +234,8 @@
   font-weight: 700;
   line-height: 1.25rem;
   text-align: center;
-  background: var(--atum-error, #e74c3c);
-  color: #fff;
+  background: var(--atum-error);
+  color: var(--atum-white);
   border-radius: 10px;
 }
 
@@ -193,7 +260,7 @@
   background: var(--atum-card);
   border: 1px solid var(--atum-border);
   border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-lg);
 }
 
 .atum-notifications-panel-header {
@@ -209,6 +276,10 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.atum-notifications-actions--spaced {
+  margin-bottom: 0.5rem;
 }
 
 .atum-notifications-mark-all,
@@ -239,7 +310,7 @@
 }
 
 .atum-notification-item:hover {
-  background: var(--atum-hover, #2a2a2a);
+  background: var(--atum-hover);
 }
 
 .atum-notification-item.read {
@@ -253,20 +324,27 @@
 
 .atum-notification-body {
   font-size: 0.85rem;
-  color: var(--atum-muted, #888);
+  color: var(--atum-muted);
   margin-top: 0.25rem;
 }
 
 .atum-notification-time {
   font-size: 0.75rem;
-  color: var(--atum-muted, #666);
+  color: var(--atum-muted);
   margin-top: 0.35rem;
+}
+
+.atum-notifications-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
 }
 
 .atum-notifications-empty {
   padding: 1.5rem 1rem;
   text-align: center;
-  color: var(--atum-muted, #888);
+  color: var(--atum-muted);
   font-size: 0.9rem;
 }
 
@@ -276,7 +354,61 @@
   min-width: 0;
 }
 
-@media (max-width: 768px) {
+/* Reserve space for persistent NowPlayingBar */
+.atum-layout--has-player .atum-main {
+  padding-bottom: calc(64px + var(--safe-bottom, 0px));
+}
+
+/* ─── Bottom Tab Bar (phone only) ─── */
+.atum-tab-bar {
+  display: none;
+}
+
+/* ─── Desktop (>=1024px): collapsible sidebar ─── */
+@media (min-width: 1024px) {
+  .atum-sidebar-collapse-btn {
+    display: flex;
+  }
+
+  .atum-sidebar--collapsed {
+    width: 60px;
+    min-width: 60px;
+  }
+
+  .atum-sidebar--collapsed .atum-sidebar-top {
+    padding: 0 0 1rem;
+    justify-content: center;
+  }
+
+  .atum-sidebar--collapsed .atum-sidebar-brand {
+    font-size: 1.1rem;
+  }
+
+  .atum-sidebar--collapsed .atum-sidebar-collapse-btn {
+    display: none;
+  }
+
+  .atum-sidebar--collapsed .atum-nav-item {
+    justify-content: center;
+    padding: 0.6rem;
+  }
+
+  .atum-sidebar--collapsed .atum-nav-item span {
+    display: none;
+  }
+
+  .atum-sidebar--collapsed .atum-nav-item .atum-nav-icon {
+    margin-right: 0;
+  }
+
+  .atum-sidebar--collapsed .atum-nav-item.active {
+    border-left: 3px solid var(--atum-accent);
+    padding-left: calc(0.6rem - 3px);
+  }
+}
+
+/* ─── Tablet (600-1023px): sidebar as overlay ─── */
+@media (min-width: 600px) and (max-width: 1023px) {
   .atum-menu-toggle {
     display: flex;
   }
@@ -295,7 +427,7 @@
     max-width: 85vw;
     transform: translateX(-100%);
     transition: transform 0.25s ease-out;
-    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
+    box-shadow: 4px 0 24px var(--atum-shadow-card);
   }
 
   .atum-sidebar[data-open="true"] {
@@ -303,10 +435,159 @@
   }
 
   .atum-main {
-    padding: 3.5rem 1rem 1.5rem;
+    padding: 3.5rem 1.5rem 1.5rem;
     padding-top: max(3.5rem, env(safe-area-inset-top, 0px) + 3rem);
+    padding-left: max(1.5rem, env(safe-area-inset-left));
+    padding-right: max(1.5rem, env(safe-area-inset-right));
+    padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+  }
+}
+
+/* ─── Phone (<600px): bottom tab bar, no sidebar ─── */
+@media (max-width: 599px) {
+  .atum-menu-toggle {
+    display: none;
+  }
+
+  .atum-sidebar-backdrop {
+    display: none;
+  }
+
+  .atum-sidebar {
+    display: none;
+  }
+
+  .atum-main {
+    padding: 0.75rem 1rem 1rem;
+    padding-top: max(0.75rem, env(safe-area-inset-top, 0px) + 0.5rem);
     padding-left: max(1rem, env(safe-area-inset-left));
     padding-right: max(1rem, env(safe-area-inset-right));
-    padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+    padding-bottom: calc(60px + var(--safe-bottom, 0px) + 0.5rem);
+  }
+
+  .atum-layout--has-player .atum-main {
+    padding-bottom: calc(60px + 64px + var(--safe-bottom, 0px) + 0.5rem);
+  }
+
+  .atum-main-header {
+    padding: 0.5rem 0 0.25rem;
+  }
+
+  .atum-tab-bar {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: var(--z-sticky, 200);
+    background: linear-gradient(180deg, var(--atum-tab-bar-start) 0%, var(--atum-tab-bar-end) 100%);
+    border-top: 1px solid var(--atum-border);
+    padding-bottom: var(--safe-bottom, 0px);
+    align-items: stretch;
+    justify-content: space-around;
+  }
+
+  /* Shift NowPlayingBar above tab bar */
+  .now-playing-bar {
+    bottom: calc(60px + var(--safe-bottom, 0px));
+    padding-bottom: 0;
+  }
+
+  .atum-tab-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    flex: 1;
+    min-height: 56px;
+    padding: 6px 0 4px;
+    background: none;
+    border: none;
+    color: var(--atum-text-muted);
+    text-decoration: none;
+    cursor: pointer;
+    transition: color 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .atum-tab-item:hover,
+  .atum-tab-item:focus-visible {
+    color: var(--atum-text);
+  }
+
+  .atum-tab-item.active {
+    color: var(--atum-accent);
+  }
+
+  .atum-tab-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+    flex-shrink: 0;
+  }
+
+  .atum-tab-label {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 0.6rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    line-height: 1;
+  }
+
+  /* "More" popup */
+  .atum-tab-more-wrap {
+    flex: 1;
+    position: relative;
+    display: flex;
+  }
+
+  .atum-tab-more-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 299;
+    background: var(--atum-overlay-mid);
+  }
+
+  .atum-tab-more-menu {
+    position: absolute;
+    bottom: 100%;
+    right: 0;
+    margin-bottom: 8px;
+    z-index: 300;
+    width: 200px;
+    background: var(--atum-card);
+    border: 1px solid var(--atum-border);
+    border-radius: var(--radius-md, 8px);
+    box-shadow: var(--shadow-lg);
+    padding: 6px 0;
+    overflow: hidden;
+  }
+
+  .atum-tab-more-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.7rem 1rem;
+    min-height: var(--touch-target-min);
+    color: var(--atum-text-muted);
+    text-decoration: none;
+    font-size: 0.85rem;
+    transition: background 0.12s, color 0.12s;
+  }
+
+  .atum-tab-more-item:hover {
+    background: var(--atum-hover);
+    color: var(--atum-text);
+  }
+
+  .atum-tab-more-item.active {
+    color: var(--atum-accent);
+  }
+
+  .atum-tab-more-icon {
+    width: 1.15rem;
+    height: 1.15rem;
+    flex-shrink: 0;
+    opacity: 0.9;
   }
 }

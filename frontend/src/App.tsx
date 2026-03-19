@@ -2,7 +2,11 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { DownloadsEventsProvider } from './contexts/DownloadsEventsContext';
 import { ToastProvider } from './contexts/ToastContext';
+import { NowPlayingProvider } from './contexts/NowPlayingContext';
+import { FavoritesProvider } from './contexts/FavoritesContext';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { Layout } from './components/Layout';
+import { PWAUpdatePrompt } from './components/PWAUpdatePrompt';
 
 const Home = lazy(() => import('./pages/Home').then(m => ({ default: m.Home })));
 const Search = lazy(() => import('./pages/Search').then(m => ({ default: m.Search })));
@@ -12,6 +16,8 @@ const Wishlist = lazy(() => import('./pages/Wishlist').then(m => ({ default: m.W
 const Feeds = lazy(() => import('./pages/Feeds').then(m => ({ default: m.Feeds })));
 const Library = lazy(() => import('./pages/Library').then(m => ({ default: m.Library })));
 const Radio = lazy(() => import('./pages/Radio').then(m => ({ default: m.Radio })));
+const Playlists = lazy(() => import('./pages/Playlists').then(m => ({ default: m.Playlists })));
+const PlaylistDetail = lazy(() => import('./pages/PlaylistDetail').then(m => ({ default: m.PlaylistDetail })));
 const Settings = lazy(() => import('./pages/Settings').then(m => ({ default: m.Settings })));
 const Player = lazy(() => import('./pages/Player').then(m => ({ default: m.Player })));
 const ReceiverPlayer = lazy(() => import('./pages/ReceiverPlayer').then(m => ({ default: m.ReceiverPlayer })));
@@ -21,23 +27,32 @@ function App() {
     <BrowserRouter>
       <DownloadsEventsProvider>
         <ToastProvider>
-          <Suspense fallback={null}>
-            <Routes>
-              <Route path="/play-receiver/:id" element={<ReceiverPlayer />} />
-              <Route path="/" element={<Layout />}>
-                <Route index element={<Home />} />
-                <Route path="search" element={<Search />} />
-                <Route path="detail" element={<Detail />} />
-                <Route path="downloads" element={<Downloads />} />
-                <Route path="wishlist" element={<Wishlist />} />
-                <Route path="feeds" element={<Feeds />} />
-                <Route path="library" element={<Library />} />
-                <Route path="radio" element={<Radio />} />
-                <Route path="settings" element={<Settings />} />
-                <Route path="play/:id" element={<Player />} />
-              </Route>
-            </Routes>
-          </Suspense>
+          <NowPlayingProvider>
+            <FavoritesProvider>
+            <ErrorBoundary>
+              <PWAUpdatePrompt />
+            <Suspense fallback={<div className="app-loading-fallback"><div className="app-loading-spinner" /></div>}>
+              <Routes>
+                <Route path="/play-receiver/:id" element={<ReceiverPlayer />} />
+                <Route path="/" element={<Layout />}>
+                  <Route index element={<Home />} />
+                  <Route path="search" element={<Search />} />
+                  <Route path="detail" element={<Detail />} />
+                  <Route path="downloads" element={<Downloads />} />
+                  <Route path="wishlist" element={<Wishlist />} />
+                  <Route path="feeds" element={<Feeds />} />
+                  <Route path="library" element={<Library />} />
+                  <Route path="radio" element={<Radio />} />
+                  <Route path="playlists" element={<Playlists />} />
+                  <Route path="playlists/:id" element={<PlaylistDetail />} />
+                  <Route path="settings" element={<Settings />} />
+                  <Route path="play/:id" element={<Player />} />
+                </Route>
+              </Routes>
+            </Suspense>
+            </ErrorBoundary>
+            </FavoritesProvider>
+          </NowPlayingProvider>
         </ToastProvider>
       </DownloadsEventsProvider>
     </BrowserRouter>

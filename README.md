@@ -60,6 +60,19 @@ Toda a documentação está em **[docs/](docs/README.md)**:
 - [Arquitetura Netflix self-hosted (música)](docs/arquitetura-netflix-self-hosted.md)
 - [Solução de problemas](docs/troubleshooting.md)
 
+## Interface Web — Atum Media Center
+
+O projeto inclui uma interface web completa (SPA React + FastAPI) para gerenciar a biblioteca de mídia:
+
+- **Biblioteca** com busca, filtros, capa automática e importação de pastas locais
+- **Player Receiver** hi-fi estilo vintage com VU meters, spectrum analyzer, EQ paramétrico 10 bandas e SmartEQ
+- **AI Agent** integrado ao Receiver com ações executáveis (play/pause, volume, EQ, navegação), input por voz (Web Speech API) e sugestões proativas
+- **Receiver Mobile** responsivo com swipe entre stacks, dots com progresso contínuo, haptic feedback, safe areas e breakpoints para Galaxy S21, Moto Z2, iPad e iPad Pro
+- **Radio** com filas inteligentes montadas por AI (Smart Queue)
+- **PWA** com offline support e Media Session API
+
+Para iniciar: `docker compose up` (veja `.env.docker.example` para configuração).
+
 ## Testes
 
 Para rodar os testes: `pip install -e ".[dev]"` e `pytest tests`. Com cobertura: `pytest tests --cov=app --cov-report=term-missing`.

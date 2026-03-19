@@ -8,7 +8,7 @@
 }
 
 .atum-wishlist-desc {
-  color: var(--atum-muted, #888);
+  color: var(--atum-muted);
   margin-bottom: 1.5rem;
 }
 
@@ -34,19 +34,19 @@
   flex: 1;
   min-width: 200px;
   padding: 0.5rem;
-  border: 1px solid var(--atum-border, #333);
+  border: 1px solid var(--atum-border);
   border-radius: 4px;
-  background: var(--atum-bg-input, #222);
-  color: var(--atum-fg, #eee);
+  background: var(--atum-bg-input);
+  color: var(--atum-fg);
 }
 
 .atum-wishlist-error {
-  color: var(--atum-error, #e74c3c);
+  color: var(--atum-error);
   margin-top: 0.5rem;
 }
 
 .atum-wishlist-empty {
-  color: var(--atum-muted, #888);
+  color: var(--atum-muted);
 }
 
 .atum-wishlist-list {
@@ -61,7 +61,7 @@
   justify-content: space-between;
   gap: 0.5rem;
   padding: 0.5rem;
-  border-bottom: 1px solid var(--atum-border, #333);
+  border-bottom: 1px solid var(--atum-border);
 }
 
 .atum-wishlist-term-text {
@@ -74,10 +74,10 @@
   width: 100%;
   max-width: 600px;
   padding: 0.5rem;
-  border: 1px solid var(--atum-border, #333);
+  border: 1px solid var(--atum-border);
   border-radius: 4px;
-  background: var(--atum-bg-input, #222);
-  color: var(--atum-fg, #eee);
+  background: var(--atum-bg-input);
+  color: var(--atum-fg);
   font-family: inherit;
   resize: vertical;
 }
@@ -115,6 +115,13 @@
   transition: background 0.2s, border-color 0.2s, color 0.2s;
 }
 
+.atum-wishlist-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+}
+
 .atum-wishlist-pill:hover {
   background: var(--atum-card-hover);
 }
@@ -122,7 +129,7 @@
 .atum-wishlist-pill--active {
   background: var(--atum-accent);
   border-color: var(--atum-accent);
-  color: #000;
+  color: var(--atum-bg);
 }
 
 .atum-wishlist-pill:focus-visible {
@@ -139,9 +146,103 @@
   bottom: 1rem;
   right: 1rem;
   padding: 0.75rem 1rem;
-  background: var(--atum-surface, #2a2a2a);
-  border: 1px solid var(--atum-border, #333);
+  background: var(--atum-surface);
+  border: 1px solid var(--atum-border);
   border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-md);
   z-index: 1000;
+}
+
+@media (max-width: 599px) {
+  .atum-wishlist {
+    padding: 0.5rem;
+  }
+  .atum-wishlist-title {
+    font-size: 1.25rem;
+  }
+  .atum-wishlist-add-form {
+    flex-direction: column;
+  }
+  .atum-wishlist-input {
+    min-width: 0;
+    width: 100%;
+  }
+  .atum-wishlist-add-form button {
+    width: 100%;
+  }
+  .atum-wishlist-textarea {
+    max-width: 100%;
+  }
+  .atum-wishlist-run {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .atum-wishlist-run-btn {
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+/* AI Suggestions */
+.atum-wishlist-ai {
+  margin-bottom: 1.5rem;
+}
+.atum-wishlist-ai-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+.atum-wishlist-ai-header .atum-wishlist-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+}
+.atum-wishlist-ai-loading,
+.atum-wishlist-ai-empty {
+  color: var(--atum-text-muted);
+  font-size: 0.85rem;
+  padding: 1rem 0;
+}
+.atum-wishlist-ai-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.atum-wishlist-ai-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid var(--atum-border);
+  border-radius: 8px;
+  background: var(--atum-surface);
+}
+.atum-wishlist-ai-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1;
+}
+.atum-wishlist-ai-card-term {
+  font-weight: 600;
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.atum-wishlist-ai-card-reason {
+  font-size: 0.78rem;
+  color: var(--atum-text-muted);
+}
+.atum-wishlist-ai-card-type {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--atum-accent);
+  font-weight: 600;
 }

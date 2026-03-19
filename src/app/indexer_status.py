@@ -14,6 +14,9 @@ logger = logging.getLogger(__name__)
 
 REDIS_KEY_PREFIX = "dl-torrent:indexer:status:"
 
+_cached_client = None
+_cached_client_url: str | None = None
+
 
 def get_indexer_base_urls(settings: "Settings") -> dict[str, str]:
     """Retorna { indexer: base_url } apenas para indexadores com URL não vazia."""
@@ -29,27 +32,36 @@ def get_indexer_base_urls(settings: "Settings") -> dict[str, str]:
 
 
 def _redis_client(redis_url: str):
+    global _cached_client, _cached_client_url
+    if _cached_client is not None and _cached_client_url == redis_url:
+        try:
+            _cached_client.ping()
+            return _cached_client
+        except Exception:
+            _cached_client = None
     import redis
-    return redis.from_url(redis_url, decode_responses=True)
+    _cached_client = redis.from_url(redis_url, decode_responses=True)
+    _cached_client_url = redis_url
+    return _cached_client
 
 
 def get_indexer_status(redis_url: str | None) -> dict[str, bool]:
     """
     Retorna status de cada indexador: { "1337x": True, "tpb": False, ... }.
     Ausência de chave ou Redis indisponível → considerado ok (True).
+    Uses mget for a single round-trip.
     """
+    names = sorted(ALL_INDEXERS)
     if not (redis_url or "").strip():
-        return {name: True for name in sorted(ALL_INDEXERS)}
+        return {name: True for name in names}
     try:
         client = _redis_client(redis_url.strip())
-        out: dict[str, bool] = {}
-        for name in sorted(ALL_INDEXERS):
-            val = client.get(REDIS_KEY_PREFIX + name)
-            out[name] = val != "fail"
-        return out
+        keys = [REDIS_KEY_PREFIX + name for name in names]
+        values = client.mget(keys)
+        return {name: val != "fail" for name, val in zip(names, values)}
     except Exception as e:
         logger.warning("indexer_status get_indexer_status failed: %s", e)
-        return {name: True for name in sorted(ALL_INDEXERS)}
+        return {name: True for name in names}
 
 
 def get_enabled_indexers(redis_url: str | None) -> list[str]:
@@ -62,8 +74,11 @@ def get_enabled_indexers(redis_url: str | None) -> list[str]:
     return [name for name in sorted(ALL_INDEXERS) if status.get(name, True)]
 
 
+_STATUS_TTL_SECONDS = 300
+
+
 def set_indexer_status(redis_url: str | None, indexer: str, ok: bool) -> None:
-    """Escreve status do indexador no Redis (ok -> "ok", fail -> "fail")."""
+    """Escreve status do indexador no Redis com TTL de 5 min."""
     if not (redis_url or "").strip():
         return
     if indexer not in ALL_INDEXERS:
@@ -71,7 +86,7 @@ def set_indexer_status(redis_url: str | None, indexer: str, ok: bool) -> None:
     try:
         client = _redis_client(redis_url.strip())
         key = REDIS_KEY_PREFIX + indexer
-        client.set(key, "ok" if ok else "fail")
+        client.setex(key, _STATUS_TTL_SECONDS, "ok" if ok else "fail")
     except Exception as e:
         logger.warning("indexer_status set_indexer_status failed: %s", e)
 
@@ -113,7 +128,21 @@ def run_health_cycle(
         for future in as_completed(futures):
             name, ok = future.result()
             result[name] = ok
-            if redis_url and (redis_url or "").strip():
-                set_indexer_status(redis_url, name, ok)
             logger.info("indexer check %s: %s", name, "ok" if ok else "fail")
+
+    if result and redis_url and (redis_url or "").strip():
+        try:
+            client = _redis_client(redis_url.strip())
+            pipe = client.pipeline(transaction=False)
+            for name, ok in result.items():
+                pipe.setex(REDIS_KEY_PREFIX + name, _STATUS_TTL_SECONDS, "ok" if ok else "fail")
+            pipe.execute()
+        except Exception as e:
+            logger.warning("indexer_status run_health_cycle redis pipeline failed: %s", e)
+        try:
+            from .event_bus import CHANNEL_INDEXERS, publish
+            publish(CHANNEL_INDEXERS, result)
+        except Exception as e:
+            logger.debug("indexer_status publish failed: %s", e)
+
     return result

@@ -25,7 +25,7 @@
   background: var(--atum-card);
   border: 1px solid var(--atum-border);
   border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 20px var(--atum-shadow-card);
   color: var(--atum-text);
   animation: atum-toast-in 0.25s ease-out;
 }

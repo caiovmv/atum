@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from ..db_postgres import connection_postgres
 
+_DEFAULT_LIMIT = 5000
+
 
 def add_term(term: str, database_url: str = "") -> int:
     if not term or not term.strip():
@@ -19,10 +21,18 @@ def add_term(term: str, database_url: str = "") -> int:
             return row["id"] if row else 0
 
 
-def list_all(database_url: str) -> list[dict]:
+def list_all(database_url: str, *, limit: int | None = None, offset: int | None = None) -> list[dict]:
     with connection_postgres(database_url) as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT id, term, created_at FROM wishlist ORDER BY id")
+            sql = "SELECT id, term, created_at FROM wishlist ORDER BY id"
+            params: list[object] = []
+            effective_limit = limit if limit is not None and limit > 0 else _DEFAULT_LIMIT
+            sql += " LIMIT %s"
+            params.append(effective_limit)
+            if offset is not None and offset > 0:
+                sql += " OFFSET %s"
+                params.append(offset)
+            cur.execute(sql, params or None)
             return [dict(r) for r in cur.fetchall()]
 
 

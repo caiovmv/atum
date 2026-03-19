@@ -1,0 +1,139 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runner
+  namespace: atum
+  labels:
+    app.kubernetes.io/name: runner
+    app.kubernetes.io/component: torrent-runner
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: runner
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: runner
+        app.kubernetes.io/component: torrent-runner
+    spec:
+      # hostNetwork permite que as portas BitTorrent sejam acessíveis diretamente do nó.
+      # Alternativa: usar Service LoadBalancer (ver service.yaml) sem hostNetwork.
+      containers:
+        - name: runner
+          image: ghcr.io/caiovmv/atum-runner:latest
+          command: ["uvicorn", "app.runner.app:app", "--host", "0.0.0.0", "--port", "9092"]
+          ports:
+            - containerPort: 9092
+              name: api
+            - containerPort: 6881
+              name: bt-tcp-6881
+              protocol: TCP
+            - containerPort: 6882
+              name: bt-tcp-6882
+              protocol: TCP
+            - containerPort: 6883
+              name: bt-tcp-6883
+              protocol: TCP
+            - containerPort: 6884
+              name: bt-tcp-6884
+              protocol: TCP
+            - containerPort: 6885
+              name: bt-tcp-6885
+              protocol: TCP
+            - containerPort: 6886
+              name: bt-tcp-6886
+              protocol: TCP
+            - containerPort: 6887
+              name: bt-tcp-6887
+              protocol: TCP
+            - containerPort: 6888
+              name: bt-tcp-6888
+              protocol: TCP
+            - containerPort: 6889
+              name: bt-tcp-6889
+              protocol: TCP
+            - containerPort: 6881
+              name: bt-udp-6881
+              protocol: UDP
+            - containerPort: 6882
+              name: bt-udp-6882
+              protocol: UDP
+            - containerPort: 6883
+              name: bt-udp-6883
+              protocol: UDP
+            - containerPort: 6884
+              name: bt-udp-6884
+              protocol: UDP
+            - containerPort: 6885
+              name: bt-udp-6885
+              protocol: UDP
+            - containerPort: 6886
+              name: bt-udp-6886
+              protocol: UDP
+            - containerPort: 6887
+              name: bt-udp-6887
+              protocol: UDP
+            - containerPort: 6888
+              name: bt-udp-6888
+              protocol: UDP
+            - containerPort: 6889
+              name: bt-udp-6889
+              protocol: UDP
+          envFrom:
+            - configMapRef:
+                name: atum-config
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: atum-secrets
+                  key: DATABASE_URL
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: atum-secrets
+                  key: REDIS_URL
+          livenessProbe:
+            httpGet:
+              path: /downloads
+              port: 9092
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /downloads
+              port: 9092
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+          volumeMounts:
+            - name: covers
+              mountPath: /app/covers
+            - name: library-music
+              mountPath: /library/music
+            - name: library-videos
+              mountPath: /library/videos
+          securityContext:
+            capabilities:
+              add: ["SYS_PTRACE"]
+      volumes:
+        - name: covers
+          persistentVolumeClaim:
+            claimName: api-covers
+        - name: library-music
+          persistentVolumeClaim:
+            claimName: library-music
+        - name: library-videos
+          persistentVolumeClaim:
+            claimName: library-videos

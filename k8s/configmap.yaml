@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: atum-config
+  namespace: atum
+data:
+  # Paths de biblioteca (montados via PVC)
+  LIBRARY_MUSIC_PATH: /library/music
+  LIBRARY_VIDEOS_PATH: /library/videos
+  COVERS_DIR: /app/covers
+
+  # URLs dos indexadores
+  X1337_BASE_URL: https://www.1377x.to
+  TPB_BASE_URL: https://tpb.party
+  TG_BASE_URL: https://torrentgalaxy.one
+  YTS_BASE_URL: https://yts.lt
+  EZTV_BASE_URL: https://eztv.re
+  NYAA_BASE_URL: https://nyaa.si
+  LIMETORRENTS_BASE_URL: https://www.limetorrents.lol
+  TORLOCK_BASE_URL: https://www.torlock.com
+  FITGIRL_BASE_URL: https://fitgirl-repacks.site
+  RUTRACKER_BASE_URL: https://rutracker.org
+  RARBG_BASE_URL: https://www.rarbgproxy.to
+  EXT_BASE_URL: https://ext.to
+  FLARESOLVERR_URL: http://flaresolverr.atum.svc.cluster.local:8191
+
+  # URLs internas de serviços
+  DOWNLOAD_RUNNER_URL: http://runner.atum.svc.cluster.local:9092
+
+  # CORS
+  CORS_ORIGINS: "*"
+
+  # Tuning de workers
+  SYNC_MAX_WORKERS: "8"
+  ENRICHMENT_MAX_WORKERS: "8"
+
+  # Timezone
+  TZ: America/Sao_Paulo

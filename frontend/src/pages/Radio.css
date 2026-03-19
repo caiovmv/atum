@@ -29,7 +29,7 @@
   height: 192px;
   object-fit: cover;
   border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 8px 24px var(--atum-shadow-card);
 }
 
 .atum-radio-hero-cover-placeholder {
@@ -43,7 +43,7 @@
   font-size: 3rem;
   font-weight: 700;
   color: var(--atum-muted);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8px 24px var(--atum-vfd-ob-3);
 }
 
 .atum-radio-hero-text {
@@ -116,7 +116,7 @@
 
 .atum-radio-hero-btn-primary {
   background: var(--atum-accent);
-  color: #000;
+  color: var(--atum-text-on-accent);
   padding: 0.6rem 1.5rem;
 }
 
@@ -162,7 +162,7 @@
   background: var(--atum-card);
   border: 1px solid var(--atum-border);
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 12px var(--atum-vfd-ob-3);
   z-index: 50;
 }
 
@@ -183,7 +183,7 @@
 }
 
 .atum-radio-options-item-danger {
-  color: var(--atum-error, #e74c3c);
+  color: var(--atum-error);
 }
 
 /* Sintonia selector */
@@ -344,7 +344,7 @@
 .atum-radio-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--atum-vfd-ob-5);
   z-index: 100;
 }
 
@@ -528,7 +528,60 @@
 
 .atum-radio-btn-play {
   background: var(--atum-accent);
-  color: #000;
+  color: var(--atum-text-on-accent);
   border-color: var(--atum-accent);
   font-weight: 600;
+}
+
+@media (max-width: 599px) {
+  .atum-radio-hero {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    min-height: auto;
+    padding: 1rem 0.75rem;
+    gap: 1rem;
+  }
+  .atum-radio-hero-cover,
+  .atum-radio-hero-cover-placeholder {
+    width: 140px;
+    height: 140px;
+  }
+  .atum-radio-hero-title {
+    font-size: 1.35rem;
+    white-space: normal;
+  }
+  .atum-radio-controls {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .atum-radio-tracks-table th:nth-child(3),
+  .atum-radio-tracks-table td:nth-child(3) {
+    display: none;
+  }
+  .atum-radio-tracks-table th,
+  .atum-radio-tracks-table td {
+    padding: 0.4rem 0.5rem;
+    font-size: 0.82rem;
+  }
+  .atum-radio-modal {
+    width: calc(100vw - 2rem);
+    max-height: 80vh;
+    padding: 1rem;
+  }
+  .atum-radio-modal-cover-row {
+    flex-direction: column;
+    align-items: center;
+  }
+}
+
+@media (min-width: 600px) and (max-width: 767px) {
+  .atum-radio-hero-cover,
+  .atum-radio-hero-cover-placeholder {
+    width: 160px;
+    height: 160px;
+  }
+  .atum-radio-hero-title {
+    font-size: 1.6rem;
+  }
 }

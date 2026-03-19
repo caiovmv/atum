@@ -6,6 +6,17 @@ services:
       dockerfile: Dockerfile.frontend
     ports:
       - "80:80"
+      - "443:443"
+    environment:
+      - BASIC_AUTH_USER=${BASIC_AUTH_USER:-}
+      - BASIC_AUTH_PASS=${BASIC_AUTH_PASS:-}
+    volumes:
+      - nginx_certs:/etc/nginx/ssl
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fk https://localhost:443/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
     depends_on:
       api:
         condition: service_healthy
@@ -18,6 +29,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    cap_add:
+      - SYS_PTRACE
+    user: "0:0"
+    entrypoint: ["/app/docker/entrypoint-api.sh"]
     command: [ "uvicorn", "app.web.app:app", "--host", "0.0.0.0", "--port", "8000" ]
     environment:
       - DATABASE_URL=postgresql://dluser:dlpass@postgres:5432/dltorrent
@@ -27,10 +42,16 @@ services:
       - LIBRARY_VIDEOS_PATH=/library/videos
       - TMDB_API_KEY=${TMDB_API_KEY:-}
       - COVERS_DIR=/app/covers
+      - BASIC_AUTH_USER=${BASIC_AUTH_USER:-}
+      - BASIC_AUTH_PASS=${BASIC_AUTH_PASS:-}
     volumes:
-      - E:\Library\Music:/library/music
-      - E:\Library\Videos:/library/videos
+      - ${LIBRARY_MUSIC_PATH:-./data/music}:/library/music
+      - ${LIBRARY_VIDEOS_PATH:-./data/videos}:/library/videos
       - api_covers:/app/covers
+      - nginx_certs:/etc/nginx/ssl:ro
+      - ./profiles:/profiles
+    tmpfs:
+      - /tmp:size=256M
     healthcheck:
       test: [ "CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/indexers/status')\" || exit 1" ]
       interval: 15s
@@ -50,6 +71,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    cap_add:
+      - SYS_PTRACE
     command: [ "uvicorn", "app.runner.app:app", "--host", "0.0.0.0", "--port", "9092" ]
     ports:
       # Portas BitTorrent (TCP + UDP) para aceitar conexões de entrada de peers e DHT
@@ -62,9 +85,12 @@ services:
       - LIBRARY_VIDEOS_PATH=/library/videos
       - COVERS_DIR=/app/covers
     volumes:
-      - E:\Library\Music:/library/music
-      - E:\Library\Videos:/library/videos
+      - ${LIBRARY_MUSIC_PATH:-./data/music}:/library/music
+      - ${LIBRARY_VIDEOS_PATH:-./data/videos}:/library/videos
       - api_covers:/app/covers
+      - ./profiles:/profiles
+    tmpfs:
+      - /tmp:size=128G
     healthcheck:
       test: [ "CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:9092/downloads')\" || exit 1" ]
       interval: 15s
@@ -85,6 +111,28 @@ services:
       POSTGRES_USER: dluser
       POSTGRES_PASSWORD: dlpass
       POSTGRES_DB: dltorrent
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=128MB"
+      - "-c"
+      - "effective_cache_size=384MB"
+      - "-c"
+      - "work_mem=4MB"
+      - "-c"
+      - "maintenance_work_mem=64MB"
+      - "-c"
+      - "wal_level=minimal"
+      - "-c"
+      - "max_wal_senders=0"
+      - "-c"
+      - "checkpoint_completion_target=0.9"
+      - "-c"
+      - "random_page_cost=1.1"
+      - "-c"
+      - "effective_io_concurrency=200"
+      - "-c"
+      - "log_min_duration_statement=500"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/schema_postgres.sql:/docker-entrypoint-initdb.d/01-schema.sql
@@ -98,11 +146,12 @@ services:
     restart: unless-stopped
 
   redis:
-    image: redis:latest
+    image: redis:7-alpine
+    command: [ "redis-server", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru", "--save", "60", "1000", "--appendonly", "yes" ]
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -115,15 +164,22 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    cap_add:
+      - SYS_PTRACE
     command: [ "dl-torrent", "feed", "daemon", "--interval", "30" ]
     environment:
       - DATABASE_URL=postgresql://dluser:dlpass@postgres:5432/dltorrent
+      - REDIS_URL=redis://redis:6379/0
       - DOWNLOAD_RUNNER_URL=http://runner:9092
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
       runner:
         condition: service_healthy
+    volumes:
+      - ./profiles:/profiles
     networks:
       - dl-torrent
     restart: unless-stopped
@@ -133,6 +189,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    cap_add:
+      - SYS_PTRACE
     command: [ "dl-torrent", "sync", "daemon", "--interval", "300" ]
     environment:
       - DATABASE_URL=postgresql://dluser:dlpass@postgres:5432/dltorrent
@@ -142,10 +200,14 @@ services:
       - COVERS_DIR=/app/covers
       - TMDB_API_KEY=${TMDB_API_KEY:-}
       - TMDB_READ_ACCESS_TOKEN=${TMDB_READ_ACCESS_TOKEN:-}
+      - SYNC_MAX_WORKERS=${SYNC_MAX_WORKERS:-8}
     volumes:
-      - E:\Library\Music:/library/music
-      - E:\Library\Videos:/library/videos
+      - ${LIBRARY_MUSIC_PATH:-./data/music}:/library/music
+      - ${LIBRARY_VIDEOS_PATH:-./data/videos}:/library/videos
       - api_covers:/app/covers
+      - ./profiles:/profiles
+    tmpfs:
+      - /tmp:size=256M
     depends_on:
       postgres:
         condition: service_healthy
@@ -160,6 +222,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    cap_add:
+      - SYS_PTRACE
     command: [ "dl-torrent", "indexers", "daemon", "--interval", "300" ]
     environment:
       - DATABASE_URL=postgresql://dluser:dlpass@postgres:5432/dltorrent
@@ -175,6 +239,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      - ./profiles:/profiles
     networks:
       - dl-torrent
     restart: unless-stopped
@@ -184,6 +250,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.enrichment
+    cap_add:
+      - SYS_PTRACE
     command: [ "dl-torrent", "enrichment", "daemon", "--interval", "300", "--batch-size", "10" ]
     environment:
       - DATABASE_URL=postgresql://dluser:dlpass@postgres:5432/dltorrent
@@ -192,10 +260,14 @@ services:
       - LIBRARY_VIDEOS_PATH=/library/videos
       - TMDB_API_KEY=${TMDB_API_KEY:-}
       - COVERS_DIR=/app/covers
+      - ENRICHMENT_MAX_WORKERS=${ENRICHMENT_MAX_WORKERS:-5}
     volumes:
-      - E:\Library\Music:/library/music
-      - E:\Library\Videos:/library/videos
+      - ${LIBRARY_MUSIC_PATH:-./data/music}:/library/music
+      - ${LIBRARY_VIDEOS_PATH:-./data/videos}:/library/videos
       - api_covers:/app/covers
+      - ./profiles:/profiles
+    tmpfs:
+      - /tmp:size=256M
     depends_on:
       postgres:
         condition: service_healthy
@@ -216,6 +288,11 @@ services:
       - ollama_models:/root/.ollama
     ports:
       - "11434:11434"
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -sf http://localhost:11434/ || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     networks:
       - dl-torrent
     restart: unless-stopped
@@ -235,6 +312,45 @@ services:
     networks:
       - dl-torrent
 
+  # Cloudflare Tunnel. Profiles:
+  #   cloudflare: tunnel apenas (docker compose --profile cloudflare up -d frontend cloudflared)
+  #   android-build: tunnel + build APK (docker compose --profile android-build up -d frontend cloudflared)
+  # --no-tls-verify: cert auto-assinado. Para validar, delete volume nginx_certs e use --origin-ca-pool.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: >
+      tunnel --url https://frontend:443 --no-tls-verify
+      --proxy-connect-timeout 60s --proxy-tls-timeout 30s
+      --proxy-keepalive-timeout 90s --http2-origin
+    depends_on:
+      frontend:
+        condition: service_healthy
+    networks:
+      - dl-torrent
+    profiles:
+      - cloudflare
+      - android-build
+
+  # Build APK: JDK 25 + Android SDK em volumes persistentes.
+  # Uso: docker compose run --rm android-build <comando>
+  # Primeira execucao instala JDK/SDK nos volumes; proximas reutilizam.
+  android-build:
+    build:
+      context: .
+      dockerfile: Dockerfile.android-build
+    volumes:
+      - android_build_jdk:/opt/jdk
+      - android_build_sdk:/opt/android-sdk
+      - android_build_bubblewrap:/root/.bubblewrap
+      - .:/workspace
+    environment:
+      - JAVA_HOME=/opt/jdk
+      - ANDROID_HOME=/opt/android-sdk
+    networks:
+      - dl-torrent
+    profiles:
+      - android-build
+
 networks:
   dl-torrent:
     driver: bridge
@@ -243,4 +359,8 @@ volumes:
   postgres_data:
   redis_data:
   api_covers:
+  nginx_certs:
   ollama_models:
+  android_build_jdk:
+  android_build_sdk:
+  android_build_bubblewrap:

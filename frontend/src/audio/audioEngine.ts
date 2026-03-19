@@ -12,6 +12,8 @@ const EQ_FREQUENCIES = [40, 80, 160, 315, 630, 1250, 2500, 5000, 10000, 20000];
 export interface AudioEngine {
   ctx: AudioContext;
   analyser: AnalyserNode;
+  /** Analyser com smoothing baixo para visualizador (resposta mais rápida) */
+  analyserVisualizer: AnalyserNode;
   analyserL: AnalyserNode;
   analyserR: AnalyserNode;
   attGain: GainNode;
@@ -32,7 +34,10 @@ const ENGINE_KEY = '__receiverEngine';
  */
 export function createAudioEngine(audioElement: HTMLAudioElement): AudioEngine {
   const existing = (audioElement as unknown as Record<string, unknown>)[ENGINE_KEY] as AudioEngine | undefined;
-  if (existing) return existing;
+  if (existing) {
+    if (existing.ctx.state === 'suspended') existing.ctx.resume();
+    return existing;
+  }
 
   if (!audioElement.crossOrigin) audioElement.crossOrigin = 'anonymous';
 
@@ -71,6 +76,10 @@ export function createAudioEngine(audioElement: HTMLAudioElement): AudioEngine {
   analyser.fftSize = 2048;
   analyser.smoothingTimeConstant = 0.6;
 
+  const analyserVisualizer = ctx.createAnalyser();
+  analyserVisualizer.fftSize = 2048;
+  analyserVisualizer.smoothingTimeConstant = 0.2;
+
   const analyserL = ctx.createAnalyser();
   analyserL.fftSize = 2048;
   analyserL.smoothingTimeConstant = 0.6;
@@ -95,9 +104,10 @@ export function createAudioEngine(audioElement: HTMLAudioElement): AudioEngine {
   loudnessLow.connect(loudnessHigh);
   loudnessHigh.connect(panner);
 
-  // Balance → stereo analyser (FFT/Spectrum) → output
+  // Balance → stereo analyser (FFT/Spectrum) → analyserVisualizer → output
   panner.connect(analyser);
-  analyser.connect(ctx.destination);
+  analyser.connect(analyserVisualizer);
+  analyserVisualizer.connect(ctx.destination);
 
   // Balance → splitter → per-channel analysers (VU L/R)
   panner.connect(splitter);
@@ -105,24 +115,12 @@ export function createAudioEngine(audioElement: HTMLAudioElement): AudioEngine {
   splitter.connect(analyserR, 1);
 
   const engine: AudioEngine = {
-    ctx, analyser, analyserL, analyserR,
+    ctx, analyser, analyserVisualizer, analyserL, analyserR,
     attGain, volumeGain, eqBands, loudnessLow, loudnessHigh, panner,
     dispose() {
-      try {
-        source.disconnect();
-        attGain.disconnect();
-        volumeGain.disconnect();
-        for (const band of eqBands) band.disconnect();
-        loudnessLow.disconnect();
-        loudnessHigh.disconnect();
-        panner.disconnect();
-        analyser.disconnect();
-        splitter.disconnect();
-        analyserL.disconnect();
-        analyserR.disconnect();
-        ctx.close();
-      } catch { /* already closed */ }
-      delete (audioElement as unknown as Record<string, unknown>)[ENGINE_KEY];
+      // No-op: engine persiste no elemento <audio> e é reutilizado via ENGINE_KEY.
+      // createMediaElementSource só pode ser chamado UMA VEZ por elemento,
+      // então o grafo de nós é preservado intacto entre trocas de faixa.
     },
   };
   (audioElement as unknown as Record<string, unknown>)[ENGINE_KEY] = engine;

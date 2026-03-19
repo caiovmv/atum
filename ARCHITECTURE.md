@@ -190,21 +190,33 @@ graph TB
 | Feed Daemon | `dl-torrent feed daemon` | **B** | 30s | Poll de feeds RSS e adição automática de downloads |
 | Sync Daemon | `dl-torrent sync daemon` | **B** | 300s | Reconciliação de downloads com filesystem + scan de library imports |
 | Indexers Daemon | `dl-torrent indexers daemon` | **C** | 300s | Health-check paralelo dos indexadores (`ThreadPoolExecutor`), atualiza Redis, notifica UI via SSE |
-| Enrichment Daemon | `dl-torrent enrichment daemon` | **C** | 300s | Enriquecimento paralelo de `library_imports` em batch (`ThreadPoolExecutor`, 3 workers) |
+| Enrichment Daemon | `dl-torrent enrichment daemon` | **C** | 300s | Enriquecimento paralelo de `library_imports` em batch (`ThreadPoolExecutor`, 5 workers default, configurável via `ENRICHMENT_MAX_WORKERS`) |
 
 ### 4.7 Concorrência e Paralelismo
 
 | Padrão | Onde | Propósito |
 |--------|------|-----------|
 | `ThreadPoolExecutor` | `search.py` `search_all()` | Busca em até 6 indexadores em paralelo |
-| `ThreadPoolExecutor` | `ai/enrichment_daemon.py` | Processa até 3 itens do batch em paralelo |
-| `ThreadPoolExecutor` | `ai/enrich_music.py` | MusicBrainz + Last.fm + Spotify + Essentia em 4 threads simultâneas |
-| `ThreadPoolExecutor` | `indexer_status.py` `run_health_cycle()` | Probe de até 6 indexadores em paralelo |
-| `ThreadPoolExecutor` | `sync_library_imports.py` | Enriquecimento de pastas novas (ffprobe + capas) em 4 threads |
-| `ThreadPoolExecutor` | `feeds.py` `_collect_new_items()` | Parse de feeds RSS em paralelo (até 4 feeds simultâneos) |
+| `ThreadPoolExecutor` | `ai/enrichment_daemon.py` | Processa até 5 itens do batch em paralelo (configurável via `ENRICHMENT_MAX_WORKERS`) |
+| `ThreadPoolExecutor` | `ai/enrich_music.py` | MusicBrainz + Last.fm + Spotify + Essentia em 4 threads simultâneas; Last.fm faz artist tags + album info em paralelo |
+| `ThreadPoolExecutor` | `ai/enrich_video.py` | Download de capas small + large em paralelo |
+| `ThreadPoolExecutor` | `tmdb_enrichment.py` `enrich_tv()` | TV detail + external_ids (IMDB) em paralelo |
+| `ThreadPoolExecutor` | `indexer_status.py` `run_health_cycle()` | Probe de até 6 indexadores em paralelo; resultado gravado via Redis pipeline |
+| `ThreadPoolExecutor` | `sync_library_imports.py` | Enriquecimento de pastas novas (ffprobe + capas) em até 8 threads (configurável via `SYNC_MAX_WORKERS`) |
+| `ThreadPoolExecutor` | `feeds.py` `_collect_new_items()` | Parse de feeds RSS em paralelo (até 8 feeds simultâneos) |
+| `ThreadPoolExecutor` | `download_manager.py` `reconcile_downloads_with_filesystem()` | Verificação de `Path.exists()` em paralelo para downloads e cover paths |
+| `ThreadPoolExecutor` | `main.py` `sync_daemon_cmd()` | Reconcile e import scan rodam em paralelo no loop do daemon |
 | `ThreadPoolExecutor` | `settings.py` `reorganize_library()` | Post-processing de downloads/imports em 4 threads |
 | `threading.Thread` | `download_manager.py` | 1 thread por download ativo, com `Lock` e `Event` |
 | `threading.Thread` | `download_worker.py` | Threads separadas para busca de capa e pós-processamento |
+| `threading.Thread` | `search.py` `probe_indexer()` | Thread com `join(timeout)` para timeout de probe |
+| `threading.Lock` | `ai/enrich_music.py` | Rate limiter global MusicBrainz (max 1 req/s entre threads) |
+| Batch DB (`ANY(%s)`) | `feeds.py` `_collect_new_items()` | `is_processed_batch` pré-carrega entry_ids processados por feed em uma query |
+| Batch DB (`executemany`) | `feeds.py` `poll_feeds()` / `poll_feeds_api()` | `mark_processed_batch` marca múltiplas entries em uma transação |
+| Batch DB (`ANY(%s)`) | `sync_library_imports.py` | `get_existing_content_paths` verifica existência de paths em uma query |
+| Batch DB (loop + commit) | `sync_library_imports.py` | `add_batch` insere novos imports em uma transação |
+| Redis `mget` | `indexer_status.py` `get_indexer_status()` | Busca status de todos os indexadores em uma chamada |
+| Redis pipeline | `indexer_status.py` `run_health_cycle()` | Grava status de todos os indexadores em um batch |
 | `asyncio.to_thread()` | Routers SSE e rotas async | Executa código síncrono sem bloquear o event loop |
 | `httpx.AsyncClient` | Routers search, settings, downloads, library | HTTP assíncrono nativo no FastAPI |
 | `psycopg3 AsyncConnectionPool` | `db_postgres.py` | Pool async de conexões PostgreSQL para rotas FastAPI |
@@ -225,7 +237,7 @@ graph TB
 | Wavesurfer.js | 7.12 | Waveform de áudio |
 | react-icons (Io5) | 5.6 | Ícones |
 
-**Estilização:** CSS puro com variáveis customizadas (tema escuro "Atum", acento verde `#1db954`).  
+**Estilização:** CSS puro com variáveis customizadas (tema escuro "Atum", acento teal VFD `#00e5c8` via `--atum-accent`).  
 **Fontes:** Barlow, Inter, Orbitron (Google Fonts).
 
 ### 5.2 Roteamento
@@ -274,6 +286,7 @@ graph TB
 | SmartEQ | `components/receiver/SmartEQ.tsx` | **C** | Análise espectral automática, target curves (Harman, B&K), Room EQ via microfone |
 | ReceiverSlider | `components/receiver/ReceiverSlider.tsx` | **C** | Slider com label e valor formatado |
 | ReceiverToggle | `components/receiver/ReceiverToggle.tsx` | **C** | Toggle para LOUDNESS, ATT, SMART EQ |
+| ReceiverAI | `components/receiver/ReceiverAI.tsx` | **C** | Chat AI com streaming SSE, ações executáveis, input por voz |
 
 ### 5.4 Módulos de Áudio
 
@@ -725,6 +738,8 @@ dl-torrent/
 │           ├── notifications.py
 │           ├── radio.py
 │           ├── settings.py
+│           ├── chat.py               # [C] Chat AI + Smart Queue
+│           ├── voice.py               # [C] Busca por voz (playlists/sintonias)
 │           └── indexers.py (via __init__.py)
 ├── frontend/                         # Frontend React
 │   ├── src/
@@ -742,17 +757,32 @@ dl-torrent/
 │   │   │   ├── CoverImage.tsx        # [B] Imagem de capa
 │   │   │   ├── EmptyState.tsx        # [B] Estado vazio
 │   │   │   ├── ToastList.tsx         # [B] Toasts
+│   │   │   ├── NowPlayingBar.tsx     # [C] Mini-player persistente
+│   │   │   ├── MiniVU.tsx            # [C] Indicador VU animado
+│   │   │   ├── CommandPalette.tsx    # [C] Paleta de comandos (Ctrl+K)
+│   │   │   ├── BottomSheet.tsx       # [C] Bottom Sheet / Modal responsivo
 │   │   │   ├── receiver/            # [C] Componentes do receiver
+│   │   │   │   ├── ReceiverPanel.tsx # [C] Player principal (áudio + vídeo)
+│   │   │   │   ├── ReceiverAI.tsx    # [C] Chat AI no Stack 6
+│   │   │   │   ├── SmartEQ.tsx       # [C] Smart EQ
+│   │   │   │   └── VuMeter.tsx       # [C] VU meters
 │   │   │   └── search/              # [B] Modais de busca
 │   │   ├── contexts/
 │   │   │   ├── DownloadsEventsContext.tsx  # [A] SSE downloads
-│   │   │   └── ToastContext.tsx           # [B] Toasts
+│   │   │   ├── ToastContext.tsx           # [B] Toasts
+│   │   │   └── NowPlayingContext.tsx      # [C] Estado global de playback
+│   │   ├── hooks/
+│   │   │   ├── useCrossfade.ts       # [C] Crossfade via Web Audio API
+│   │   │   ├── usePiP.ts            # [C] Picture-in-Picture automático
+│   │   │   └── useMediaSession.ts    # [C] Media Session API
 │   │   ├── pages/                    # Páginas da aplicação
 │   │   ├── styles/                   # CSS do receiver e SmartEQ
 │   │   └── utils/                    # Formatação
 │   ├── package.json
 │   └── vite.config.ts
 ├── scripts/
+│   ├── apply-android-auto-patch.ps1  # [C] Patch pós-bubblewrap
+│   ├── android-build-docker.ps1      # [C] Build APK via Docker
 │   ├── schema_postgres.sql           # [A] Schema base do banco
 │   ├── migrations/                   # [A] Migrations versionadas
 │   ├── serve.ps1                     # [B] Script de dev local
@@ -762,6 +792,11 @@ dl-torrent/
 │   ├── unit/                         # [A] Testes unitários
 │   ├── integration/                  # [B] Testes de integração
 │   └── e2e/                          # [B] Testes E2E
+├── android-twa/                      # [C] TWA + Android Auto + Voice
+│   ├── app/src/main/java/com/atum/media/
+│   │   ├── AtumMediaBrowserService.java
+│   │   └── AtumPlaybackManager.java
+│   └── twa-manifest.json
 ├── docker/
 │   └── nginx.conf                    # [A] Config do nginx
 ├── Dockerfile                        # [A] Backend
@@ -774,3 +809,122 @@ dl-torrent/
 ├── .env.docker.example               # [B] Exemplo Docker
 └── README.md                         # [B] Documentação
 ```
+
+---
+
+## 13. Funcionalidades Recentes
+
+### 13.1 NowPlayingContext & NowPlayingBar
+
+Contexto global (`NowPlayingContext`) gerencia estado de playback (track, isPlaying, currentTime, duration) com um `<audio>` oculto para o mini-player. O `NowPlayingBar` exibe título, artista, controles e um `MiniVU` animado. Quando o `ReceiverPlayer` toma controle, seta `receiverActive=true` para evitar conflito de playback.
+
+### 13.2 Receiver: Labels nos Dots & Stacks
+
+Os dots de swipe agora exibem labels VFD (SRX, METERS, SPECTRUM, EQ, CTRL, AI) com Orbitron font. São botões clicáveis que scrollam diretamente ao stack correspondente.
+
+### 13.3 Auto-EQ via AI
+
+O botão "Auto-EQ" no Stack 6 (AI) envia o contexto da faixa ao LLM e pede uma configuração de EQ em JSON `{bass, mid, treble}`. Os valores retornados são clamped entre -6 e +6 e aplicados diretamente nos knobs de Bass, Mid e Treble do Receiver.
+
+### 13.4 Crossfade
+
+O hook `useCrossfade` usa `exponentialRampToValueAtTime` no `volumeGain` do AudioEngine para fade out (0.6s) quando `streamUrl` muda e fade in quando a nova faixa começa a tocar. Não requer dois audio contexts.
+
+### 13.5 Vídeo no Receiver
+
+Itens de vídeo (`movies`, `tv`) agora são reproduzidos inline no Receiver em vez de redirecionar ao Player genérico. O layout mantém o chrome do Receiver (header, side panel) com um `<video>` nativo responsivo no slot principal.
+
+### 13.6 Picture-in-Picture
+
+O hook `usePiP` ativa PiP automaticamente quando o usuário navega para fora da página de vídeo (unmount). Ao retornar, sai do PiP.
+
+### 13.7 Bottom Sheet
+
+Componente `BottomSheet` genérico: no phone (< 600px) aparece como sheet deslizável com handle e drag-to-dismiss; no desktop, como modal centrado. Usado para notificações e extensível para outros contextos.
+
+### 13.8 Smart Queue via AI
+
+Endpoint `POST /api/chat/queue` recebe um prompt de mood e a lista de itens da biblioteca, e retorna IDs de faixas selecionadas pelo LLM. O ReceiverAI oferece um botão "Smart Queue" que monta uma radio queue automaticamente.
+
+### 13.9 Command Palette
+
+Acessível via `Ctrl+K` / `Cmd+K`, a paleta de comandos permite navegação rápida (Home, Search, Library, Downloads, Settings, Receiver) com busca fuzzy e atalhos de teclado.
+
+### 13.10 Streaming SSE do Chat AI
+
+Endpoint `POST /api/chat/stream` retorna Server-Sent Events com chunks de texto do LLM. O `LLMClient.chat_stream()` é um generator síncrono executado em thread via `asyncio.Queue` para não bloquear o event loop do FastAPI. O `ReceiverAI` consome o stream com `ReadableStream` no browser.
+
+### 13.11 ErrorBoundary & Robustez
+
+`ErrorBoundary` global captura erros React e exibe fallback com "Recarregar página" / "Tentar novamente". Páginas Home, Library, Downloads, Feeds e Wishlist exibem erros de fetch com botão "Tentar novamente". `Suspense` exibe spinner durante lazy loading.
+
+### 13.12 Skeleton Loaders & Virtualização
+
+Skeleton loaders (shimmer) em Home (Hero + Rails), Library (cards) e Downloads (rows) substituem texto "Carregando". O hook `useInfiniteRender` faz renderização progressiva na Library com `IntersectionObserver`.
+
+### 13.13 Acessibilidade
+
+- `useFocusTrap` em BottomSheet e CommandPalette
+- Skip link "Pular para conteúdo principal" no Layout
+- `prefers-reduced-motion` global desabilita animações
+- `useMediaSession` no NowPlayingBar para controles de mídia do OS
+
+### 13.14 PWA & Offline
+
+- `offline.html` como `navigateFallback` do Workbox, com VFD theme
+- `manifest.json` + Service Worker via `vite-plugin-pwa`, com `id: '/'`
+- `offline.html` incluído em `includeAssets` para precache garantido
+
+### 13.15 Backend: Paginação & CORS
+
+- `limit`/`offset` em `GET /library`, `GET /wishlist`, `GET /feeds/pending`, `downloads.list`, `list_feed_records`
+- CORS configurável via `CORS_ORIGINS` env var
+- `POST /downloads` validado com Pydantic (`AddDownloadBody`)
+- Upload de capa rádio limitado a 5 MB
+- URLs validadas (scheme http/https) no `test-connection`
+
+### 13.16 SPA Routing
+
+Rotas `/play-receiver/{id}`, `/play/{id}`, `/detail/{id}`, `/search` servem `index.html` para suportar deep linking e refresh no browser.
+
+### 13.17 CI/CD
+
+- `.github/workflows/ci.yml`: roda em push/PR para main — frontend (TypeScript check, Vitest, build) e backend (ruff lint/format)
+- `.github/workflows/build-and-push-ghcr.yml`: build e push de imagens Docker (API, Runner, Frontend, Enrichment) em tags `v*`
+- Dockerfiles com usuário non-root (`atum`)
+
+### 13.18 Receiver Mobile Responsivo
+
+- **Marquee VFD**: Título com scroll horizontal automático (estilo player MP3 de carro) via `ResizeObserver` + CSS `@keyframes`. Ativa apenas quando o texto excede o container.
+- **Breakpoints por dispositivo**: Small phone (≤360px, Galaxy S21/Moto Z2), short phones (max-height 640px), hi-DPI 3x, tablet portrait (768-1024px, grid 2 colunas), tablet landscape (desktop-like).
+- **Dots com progresso contínuo**: CSS custom property `--dot-glow` calculada pela fração de scroll, com brilho VFD proporcional à proximidade.
+- **Haptic feedback**: `navigator.vibrate(8)` ao mudar de stack e ao swipe-to-dismiss.
+- **Swipe-to-dismiss**: Bottom sheet no `ReceiverPlayer` fecha ao arrastar >120px para baixo, com feedback visual em tempo real.
+- **Safe areas**: `env(safe-area-inset-*)` em todas as orientações (portrait/landscape) para notch, barra de gestos, etc.
+
+### 13.19 AI Agent com Ações Executáveis
+
+- **Protocolo de ações**: LLM retorna `$$ACTION:{"action":"tipo", ...}$$` no final da resposta. Frontend parseia com regex e executa callbacks.
+- **Ações suportadas**: `play`, `pause`, `stop`, `next`, `prev`, `volume` (0-100), `eq` (bass/mid/treble -6..6), `navigate` (paths da aplicação).
+- **FAB flutuante**: Botão de AI visível em todas as stacks mobile (exceto AI), com animação de pulso VFD. Abre mini-chat overlay com backdrop blur.
+- **Sugestões proativas**: Pill animada aparece ~2.5s após mudar de faixa, com dica de EQ ou curiosidade. Auto-dismiss em 8s.
+- **Input por voz**: Web Speech API (`SpeechRecognition`, pt-BR) com indicador VFD pulsante, feedback de erros e cleanup ao desmontar.
+
+### 13.20 Surfaces Android: Phone, Android Auto e Galaxy Watch
+
+Integração imersiva entre três superfícies:
+
+| Superfície | Objetivo | Implementação |
+|------------|----------|---------------|
+| **Android (phone)** | Experiência principal via TWA (PWA). Reprodução via Web Audio. | `useMediaSession` expõe controles ao sistema. |
+| **Android Auto** | Navegação e reprodução no carro. | `AtumMediaBrowserService` + `AtumPlaybackManager` com ExoPlayer, playlists e biblioteca. |
+| **Galaxy Watch** | Controles remotos e comandos por voz. | Notificação de mídia (PWA + nativo), `setMetadata` para título/artista, artwork com URL absoluta. |
+
+**Comando por voz (Google Assistant):**
+
+- `onPlayFromSearch` e `onPrepareFromSearch` no `AtumPlaybackManager`
+- API `/api/voice/collections?q=` — busca playlists e sintonias por nome
+- API `/api/voice/queue?type=&id=` — retorna fila (inclui AI Mix dinâmico)
+- Exemplos: "Tocar jazz no Atum", "Tocar [nome da playlist] no Atum"
+
+**Build:** `scripts/android-build-docker.ps1` — patch `apply-android-auto-patch.ps1` reaplica dependências e service após `bubblewrap update`.

@@ -6,21 +6,28 @@ from ..db_postgres import connection_postgres
 from ..domain import DownloadStatus
 from ..domain.ports import DownloadRepository
 
+_DEFAULT_LIMIT = 5000
+
 DOWNLOAD_COLUMNS = (
-    "id, magnet, name, save_path, status, progress, pid, error_message, added_at, updated_at"
+    "id, magnet, torrent_url, name, save_path, status, progress, pid, error_message, added_at, updated_at"
     ", num_seeds, num_peers, download_speed_bps, total_bytes, downloaded_bytes, eta_seconds"
     ", content_path, content_type"
     ", cover_path_small, cover_path_large"
     ", year, video_quality_label, audio_codec, music_quality"
     ", excluded_file_indices, torrent_files"
     ", tmdb_id, imdb_id, library_path, post_processed, previous_content_path"
+    ", artist, album, genre, tags"
+    ", bpm, musical_key, energy, danceability, valence, loudness_db, replaygain_db"
+    ", musicbrainz_id, sub_genres, moods, descriptors, record_label, release_type"
+    ", overview, vote_average, runtime_minutes, backdrop_path, original_title, tmdb_genres"
+    ", enriched_at, enrichment_sources"
 )
 
 
 def _apply_defaults(rows: list[dict]) -> None:
     import json
     for row in rows:
-        for k in ("num_seeds", "num_peers", "download_speed_bps", "total_bytes", "downloaded_bytes", "eta_seconds",
+        for k in ("torrent_url", "num_seeds", "num_peers", "download_speed_bps", "total_bytes", "downloaded_bytes", "eta_seconds",
                   "content_path", "content_type", "cover_path_small", "cover_path_large",
                   "year", "video_quality_label", "audio_codec", "music_quality", "excluded_file_indices", "torrent_files"):
             row.setdefault(k, None)
@@ -37,6 +44,13 @@ def _apply_defaults(rows: list[dict]) -> None:
         tf = row.get("torrent_files")
         if tf is not None and not isinstance(tf, list):
             row["torrent_files"] = None
+        if "tags" in row and row.get("tags") is not None and not isinstance(row["tags"], list):
+            try:
+                row["tags"] = json.loads(row["tags"]) if isinstance(row["tags"], str) else (row["tags"] or [])
+            except (ValueError, TypeError):
+                row["tags"] = []
+        if "tags" in row and row["tags"] is None:
+            row["tags"] = []
 
 
 class PostgresDownloadRepository:
@@ -52,30 +66,63 @@ class PostgresDownloadRepository:
         name: str | None = None,
         content_type: str | None = None,
         excluded_file_indices: list[int] | None = None,
+        torrent_url: str | None = None,
     ) -> int:
         import json
         indices_json = json.dumps(excluded_file_indices) if excluded_file_indices else None
         with connection_postgres(self._database_url) as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "INSERT INTO downloads (magnet, name, save_path, status, content_type, excluded_file_indices) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
-                    (magnet.strip(), (name or "").strip() or None, save_path, DownloadStatus.QUEUED.value,
+                    "INSERT INTO downloads (magnet, torrent_url, name, save_path, status, content_type, excluded_file_indices)"
+                    " VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
+                    (magnet.strip(), (torrent_url or "").strip() or None,
+                     (name or "").strip() or None, save_path, DownloadStatus.QUEUED.value,
                      content_type if content_type in ("music", "movies", "tv") else None, indices_json),
                 )
                 row = cur.fetchone()
                 conn.commit()
                 return row["id"] or 0
 
-    def list(self, status_filter: str | None = None) -> list[dict]:
+    def list(
+        self,
+        status_filter: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+        q: str | None = None,
+        content_type: str | None = None,
+    ) -> list[dict]:
         with connection_postgres(self._database_url) as conn:
             with conn.cursor() as cur:
+                conditions: list[str] = []
+                params: list = []
                 if status_filter:
-                    cur.execute(
-                        f"SELECT {DOWNLOAD_COLUMNS} FROM downloads WHERE status = %s ORDER BY id DESC",
-                        (status_filter,),
-                    )
+                    conditions.append("status = %s")
+                    params.append(status_filter)
+                if content_type and content_type.strip().lower() in ("music", "movies", "tv"):
+                    conditions.append("content_type = %s")
+                    params.append(content_type.strip().lower())
+                if q and q.strip():
+                    terms = q.strip().split()
+                    tsquery = " & ".join(t + ":*" for t in terms if t)
+                    conditions.append("search_vector @@ to_tsquery('simple', %s)")
+                    params.append(tsquery)
+                sql = f"SELECT {DOWNLOAD_COLUMNS} FROM downloads"
+                if conditions:
+                    sql += " WHERE " + " AND ".join(conditions)
+                if q and q.strip():
+                    terms = q.strip().split()
+                    tsquery_rank = " & ".join(t + ":*" for t in terms if t)
+                    sql += f" ORDER BY ts_rank(search_vector, to_tsquery('simple', %s)) DESC, id DESC"
+                    params.append(tsquery_rank)
                 else:
-                    cur.execute(f"SELECT {DOWNLOAD_COLUMNS} FROM downloads ORDER BY id DESC")
+                    sql += " ORDER BY id DESC"
+                effective_limit = limit if limit is not None and limit > 0 else _DEFAULT_LIMIT
+                sql += " LIMIT %s"
+                params.append(effective_limit)
+                if offset is not None and offset > 0:
+                    sql += " OFFSET %s"
+                    params.append(offset)
+                cur.execute(sql, params or None)
                 rows = [dict(r) for r in cur.fetchall()]
         _apply_defaults(rows)
         return rows
@@ -212,8 +259,11 @@ class PostgresDownloadRepository:
         post_processed: bool | None = None,
         content_type: str | None = None,
         previous_content_path: str | None = None,
+        artist: str | None = None,
+        album: str | None = None,
+        genre: str | None = None,
     ) -> None:
-        """Atualiza colunas de enriquecimento (TMDB/IMDB, library_path, post_processed)."""
+        """Atualiza colunas de enriquecimento (TMDB/IMDB, library_path, post_processed, artist/album/genre)."""
         updates = ["updated_at = CURRENT_TIMESTAMP"]
         args: list = []
         if tmdb_id is not None:
@@ -234,6 +284,15 @@ class PostgresDownloadRepository:
         if previous_content_path is not None:
             updates.append("previous_content_path = %s")
             args.append(previous_content_path)
+        if artist is not None:
+            updates.append("artist = %s")
+            args.append((artist or "").strip() or None)
+        if album is not None:
+            updates.append("album = %s")
+            args.append((album or "").strip() or None)
+        if genre is not None:
+            updates.append("genre = %s")
+            args.append((genre or "").strip() or None)
         if len(args) == 0:
             return
         args.append(download_id)
@@ -244,6 +303,65 @@ class PostgresDownloadRepository:
                     args,
                 )
             conn.commit()
+
+    def update_tags(self, download_id: int, tags: list[str]) -> None:
+        import json
+        with connection_postgres(self._database_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE downloads SET tags = %s::jsonb, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+                    (json.dumps(tags), download_id),
+                )
+            conn.commit()
+
+    def update_full_enrichment(
+        self,
+        download_id: int,
+        **kwargs,
+    ) -> None:
+        """Atualiza todas as colunas de enrichment de um download (BPM, moods, etc.)."""
+        _ALLOWED = {
+            "bpm", "musical_key", "energy", "danceability", "valence",
+            "loudness_db", "replaygain_db", "musicbrainz_id", "sub_genres",
+            "moods", "descriptors", "record_label", "release_type",
+            "overview", "vote_average", "runtime_minutes", "backdrop_path",
+            "original_title", "tmdb_genres", "enriched_at", "enrichment_sources",
+            "enrichment_error", "artist", "album", "genre",
+            "tmdb_id", "imdb_id", "content_type",
+        }
+        updates = ["updated_at = CURRENT_TIMESTAMP"]
+        args: list = []
+        for k, v in kwargs.items():
+            if k in _ALLOWED and v is not None:
+                updates.append(f"{k} = %s")
+                args.append(v)
+        if not args:
+            return
+        args.append(download_id)
+        with connection_postgres(self._database_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"UPDATE downloads SET {', '.join(updates)} WHERE id = %s",
+                    args,
+                )
+            conn.commit()
+
+    def list_pending_enrichment(self, limit: int = 10) -> list[dict]:
+        """Retorna downloads completed sem enrichment para o daemon processar."""
+        with connection_postgres(self._database_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""SELECT {DOWNLOAD_COLUMNS} FROM downloads
+                        WHERE status = 'completed'
+                          AND content_path IS NOT NULL
+                          AND (enriched_at IS NULL AND enrichment_error IS NULL)
+                        ORDER BY added_at ASC
+                        LIMIT %s""",
+                    (limit,),
+                )
+                rows = [dict(r) for r in cur.fetchall()]
+        _apply_defaults(rows)
+        return rows
 
     def delete(self, download_id: int) -> bool:
         with connection_postgres(self._database_url) as conn:

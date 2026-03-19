@@ -1,154 +1,47 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { Outlet, NavLink } from 'react-router-dom';
-import { IoNotificationsOutline, IoHomeOutline, IoSearch, IoDownloadOutline, IoHeartOutline, IoReaderOutline, IoLibraryOutline, IoRadioOutline, IoSettingsOutline } from 'react-icons/io5';
+import { useState, useEffect } from 'react';
+import { Outlet, NavLink, useLocation } from 'react-router-dom';
+import {
+  IoHomeOutline, IoSearch, IoDownloadOutline,
+  IoHeartOutline, IoReaderOutline, IoLibraryOutline, IoRadioOutline,
+  IoSettingsOutline, IoEllipsisHorizontal, IoListOutline,
+  IoChevronBack,
+} from 'react-icons/io5';
 import { useToast } from '../contexts/ToastContext';
+import { useNowPlaying } from '../contexts/NowPlayingContext';
+import { useLayoutNotifications } from '../hooks/useLayoutNotifications';
+import { NowPlayingBar } from './NowPlayingBar';
+import { CommandPalette } from './CommandPalette';
+import { LayoutNotifications } from './layout/LayoutNotifications';
+import { PWAInstallBanner } from './PWAInstallBanner';
 import './Layout.css';
 
-interface Notification {
-  id: number;
-  type: string;
-  title: string;
-  body?: string;
-  payload?: Record<string, unknown>;
-  read: boolean;
-  created_at: string;
-}
+const MORE_ROUTES = [
+  { to: '/wishlist', icon: IoHeartOutline, label: 'Wishlist' },
+  { to: '/feeds', icon: IoReaderOutline, label: 'Feeds' },
+  { to: '/radio', icon: IoRadioOutline, label: 'Rádio' },
+  { to: '/settings', icon: IoSettingsOutline, label: 'Configurações' },
+] as const;
 
 export function Layout() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [notifLoading, setNotifLoading] = useState(false);
   const { showToast } = useToast();
+  const { track: nowPlayingTrack } = useNowPlaying();
+  const location = useLocation();
 
-  const fetchUnreadCount = useCallback(async () => {
-    try {
-      const res = await fetch('/api/notifications/unread-count');
-      if (res.ok) {
-        const data = await res.json();
-        setUnreadCount(data.count ?? 0);
-      }
-    } catch {
-      // ignore
-    }
-  }, []);
+  const notif = useLayoutNotifications(showToast, notifOpen);
+  const isMoreActive = MORE_ROUTES.some(r => location.pathname.startsWith(r.to));
 
-  const notifSseRef = useRef<EventSource | null>(null);
-  const showToastRef = useRef(showToast);
-  showToastRef.current = showToast;
-  const [notifReconnecting, setNotifReconnecting] = useState(false);
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    fetchUnreadCount();
-    let disposed = false;
-    const open = () => {
-      if (disposed || notifSseRef.current) return;
-      const es = new EventSource('/api/notifications/events');
-      es.onmessage = (event) => {
-        setNotifReconnecting(false);
-        try {
-          const data = JSON.parse(event.data);
-          if (typeof data.count === 'number') setUnreadCount(data.count);
-        } catch {
-          // ignore
-        }
-      };
-      es.addEventListener('new_notification', ((event: MessageEvent) => {
-        setNotifReconnecting(false);
-        try {
-          const data = JSON.parse(event.data);
-          if (typeof data.count === 'number') setUnreadCount(data.count);
-          if (data.notification?.title) {
-            showToastRef.current(data.notification.title, 6000);
-          }
-        } catch {
-          // ignore
-        }
-      }) as EventListener);
-      es.onerror = () => {
-        setNotifReconnecting(true);
-        es.close();
-        notifSseRef.current = null;
-        if (!disposed) {
-          reconnectTimerRef.current = setTimeout(() => {
-            reconnectTimerRef.current = null;
-            if (document.visibilityState === 'visible') open();
-          }, 5000);
-        }
-      };
-      notifSseRef.current = es;
-    };
-    const close = () => {
-      if (notifSseRef.current) {
-        notifSseRef.current.close();
-        notifSseRef.current = null;
-      }
-      if (reconnectTimerRef.current) {
-        clearTimeout(reconnectTimerRef.current);
-        reconnectTimerRef.current = null;
-      }
-    };
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') open();
-      else close();
-    };
-    if (document.visibilityState === 'visible') open();
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => {
-      disposed = true;
-      document.removeEventListener('visibilitychange', onVisibility);
-      close();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!notifOpen) return;
-    const controller = new AbortController();
-    setNotifLoading(true);
-    fetch('/api/notifications?limit=30', { signal: controller.signal })
-      .then((r) => r.ok ? r.json() : [])
-      .then((list) => setNotifications(Array.isArray(list) ? list : []))
-      .catch((err) => {
-        if (err instanceof DOMException && err.name === 'AbortError') return;
-        setNotifications([]);
-      })
-      .finally(() => setNotifLoading(false));
-    return () => controller.abort();
-  }, [notifOpen]);
-
-  const markRead = async (id: number) => {
-    try {
-      await fetch(`/api/notifications/${id}/read`, { method: 'PATCH' });
-      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
-      fetchUnreadCount();
-    } catch {
-      // ignore
-    }
-  };
-
-  const markAllRead = async () => {
-    try {
-      await fetch('/api/notifications/mark-all-read', { method: 'POST' });
-      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-      setUnreadCount(0);
-    } catch {
-      // ignore
-    }
-  };
-
-  const clearAll = async () => {
-    try {
-      await fetch('/api/notifications/clear', { method: 'POST' });
-      setNotifications([]);
-      setUnreadCount(0);
-    } catch {
-      // ignore
-    }
-  };
+  useEffect(() => { setMoreOpen(false); }, [location.pathname]);
 
   return (
-    <div className="atum-layout">
+    <div className={`atum-layout${nowPlayingTrack ? ' atum-layout--has-player' : ''}`}>
+      <a href="#main-content" className="atum-skip-link">Pular para conteúdo principal</a>
+      <CommandPalette />
+      <PWAInstallBanner />
+      <NowPlayingBar />
       <button
         type="button"
         className="atum-menu-toggle"
@@ -166,8 +59,31 @@ export function Layout() {
         data-open={menuOpen}
         onClick={() => setMenuOpen(false)}
       />
-      <aside className="atum-sidebar" data-open={menuOpen}>
-        <div className="atum-sidebar-brand">Atum</div>
+      <aside className={`atum-sidebar${sidebarCollapsed ? ' atum-sidebar--collapsed' : ''}`} data-open={menuOpen}>
+        <div className="atum-sidebar-top">
+          {sidebarCollapsed ? (
+            <button
+              type="button"
+              className="atum-sidebar-brand atum-sidebar-brand--btn"
+              onClick={() => setSidebarCollapsed(false)}
+              aria-label="Expandir menu"
+            >
+              A
+            </button>
+          ) : (
+            <>
+              <div className="atum-sidebar-brand">Atum</div>
+              <button
+                type="button"
+                className="atum-sidebar-collapse-btn"
+                onClick={() => setSidebarCollapsed(true)}
+                aria-label="Recolher menu"
+              >
+                <IoChevronBack size={16} />
+              </button>
+            </>
+          )}
+        </div>
         <nav className="atum-nav">
           <NavLink to="/" end className={({ isActive }) => (isActive ? 'atum-nav-item active' : 'atum-nav-item')} onClick={() => setMenuOpen(false)}>
             <IoHomeOutline className="atum-nav-icon" aria-hidden />
@@ -193,6 +109,10 @@ export function Layout() {
             <IoLibraryOutline className="atum-nav-icon" aria-hidden />
             <span>Biblioteca</span>
           </NavLink>
+          <NavLink to="/playlists" className={({ isActive }) => (isActive ? 'atum-nav-item active' : 'atum-nav-item')} onClick={() => setMenuOpen(false)}>
+            <IoListOutline className="atum-nav-icon" aria-hidden />
+            <span>Playlists</span>
+          </NavLink>
           <NavLink to="/radio" className={({ isActive }) => (isActive ? 'atum-nav-item active' : 'atum-nav-item')} onClick={() => setMenuOpen(false)}>
             <IoRadioOutline className="atum-nav-icon" aria-hidden />
             <span>Rádio</span>
@@ -206,74 +126,73 @@ export function Layout() {
       <main className="atum-main">
         <div className="atum-main-header">
           <span />
-          <div className="atum-notifications-wrap">
-            <button
-              type="button"
-              className="atum-notifications-btn"
-              onClick={() => setNotifOpen((o) => !o)}
-              aria-label={unreadCount > 0 ? `${unreadCount} não lidas` : 'Notificações'}
-              aria-expanded={notifOpen}
-            >
-              <IoNotificationsOutline className="atum-notifications-icon" aria-hidden />
-              {unreadCount > 0 && (
-                <span className="atum-notifications-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>
-              )}
-            </button>
-            {notifOpen && (
-              <>
-                <div
-                  className="atum-notifications-backdrop"
-                  aria-hidden
-                  onClick={() => setNotifOpen(false)}
-                />
-                <div className="atum-notifications-panel" role="dialog" aria-label="Cronologia de notificações">
-                  <div className="atum-notifications-panel-header">
-                    <span>Notificações</span>
-                    {notifReconnecting && <span className="atum-notifications-reconnecting" aria-live="polite">Reconectando…</span>}
-                    <div className="atum-notifications-actions">
-                      {unreadCount > 0 && (
-                        <button type="button" className="atum-notifications-mark-all" onClick={markAllRead}>
-                          Marcar todas como lidas
-                        </button>
-                      )}
-                      <button type="button" className="atum-notifications-clear" onClick={clearAll}>
-                        Limpar
-                      </button>
-                    </div>
-                  </div>
-                  <div className="atum-notifications-list">
-                    {notifLoading ? (
-                      <p className="atum-notifications-empty">Carregando…</p>
-                    ) : notifications.length === 0 ? (
-                      <p className="atum-notifications-empty">Nenhuma notificação.</p>
-                    ) : (
-                      notifications.map((n) => (
-                        <div
-                          key={n.id}
-                          className={`atum-notification-item ${n.read ? 'read' : ''}`}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => { if (!n.read) markRead(n.id); }}
-                          onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !n.read) markRead(n.id); }}
-                        >
-                          <div className="atum-notification-title">{n.title}</div>
-                          {n.body && <div className="atum-notification-body">{n.body}</div>}
-                          <div className="atum-notification-time">
-                            {n.created_at ? new Date(n.created_at).toLocaleString() : ''}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
+          <LayoutNotifications
+            open={notifOpen}
+            onClose={() => setNotifOpen(false)}
+            onOpenChange={setNotifOpen}
+            unreadCount={notif.unreadCount}
+            notifications={notif.notifications}
+            loading={notif.notifLoading}
+            reconnecting={notif.notifReconnecting}
+            onMarkRead={notif.markRead}
+            onMarkAllRead={notif.markAllRead}
+            onClearAll={notif.clearAll}
+          />
         </div>
-        <div className="atum-main-content">
+        <div id="main-content" className="atum-main-content">
           <Outlet />
         </div>
       </main>
+
+      <nav className="atum-tab-bar" aria-label="Navegação principal">
+        <NavLink to="/" end className={({ isActive }) => `atum-tab-item${isActive ? ' active' : ''}`}>
+          <IoHomeOutline className="atum-tab-icon" aria-hidden />
+          <span className="atum-tab-label">Início</span>
+        </NavLink>
+        <NavLink to="/search" className={({ isActive }) => `atum-tab-item${isActive ? ' active' : ''}`}>
+          <IoSearch className="atum-tab-icon" aria-hidden />
+          <span className="atum-tab-label">Busca</span>
+        </NavLink>
+        <NavLink to="/library" className={({ isActive }) => `atum-tab-item${isActive ? ' active' : ''}`}>
+          <IoLibraryOutline className="atum-tab-icon" aria-hidden />
+          <span className="atum-tab-label">Biblioteca</span>
+        </NavLink>
+        <NavLink to="/downloads" className={({ isActive }) => `atum-tab-item${isActive ? ' active' : ''}`}>
+          <IoDownloadOutline className="atum-tab-icon" aria-hidden />
+          <span className="atum-tab-label">Downloads</span>
+        </NavLink>
+        <div className="atum-tab-more-wrap">
+          <button
+            type="button"
+            className={`atum-tab-item${isMoreActive ? ' active' : ''}`}
+            onClick={() => setMoreOpen(o => !o)}
+            aria-label="Mais opções"
+            aria-expanded={moreOpen}
+          >
+            <IoEllipsisHorizontal className="atum-tab-icon" aria-hidden />
+            <span className="atum-tab-label">Mais</span>
+          </button>
+          {moreOpen && (
+            <>
+              <div className="atum-tab-more-backdrop" onClick={() => setMoreOpen(false)} />
+              <div className="atum-tab-more-menu" role="menu">
+                {MORE_ROUTES.map(({ to, icon: Icon, label }) => (
+                  <NavLink
+                    key={to}
+                    to={to}
+                    className={({ isActive }) => `atum-tab-more-item${isActive ? ' active' : ''}`}
+                    role="menuitem"
+                    onClick={() => setMoreOpen(false)}
+                  >
+                    <Icon className="atum-tab-more-icon" aria-hidden />
+                    <span>{label}</span>
+                  </NavLink>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </nav>
     </div>
   );
 }

@@ -95,6 +95,11 @@ class Settings(BaseSettings):
     # Persistência: PostgreSQL (obrigatório). Ex.: postgresql://user:pass@host:5432/dbname
     database_url: str = ""
 
+    # Basic auth entre frontend e API: quando definidos, a API exige Authorization: Basic.
+    # O nginx (frontend) adiciona o header ao fazer proxy. Protege a API quando exposta via tunnel.
+    basic_auth_user: str = ""
+    basic_auth_pass: str = ""
+
     # Cache: se definido, usa Redis para cache de capas/TMDB (ex.: redis://redis:6379/0).
     redis_url: str = ""
 
@@ -105,7 +110,7 @@ class Settings(BaseSettings):
     def save_path_for_content_type(self, content_type: str | None) -> str:
         """Retorna o diretório base para download conforme content_type (music -> library_music_path, movies/tv -> library_videos_path)."""
         ct = (content_type or "").strip().lower()
-        if ct == "music" and self.library_music_path and self.library_music_path.strip():
+        if ct in ("music", "concerts") and self.library_music_path and self.library_music_path.strip():
             return str(Path(self.library_music_path.strip()).expanduser().resolve())
         if ct in ("movies", "tv") and self.library_videos_path and self.library_videos_path.strip():
             return str(Path(self.library_videos_path.strip()).expanduser().resolve())

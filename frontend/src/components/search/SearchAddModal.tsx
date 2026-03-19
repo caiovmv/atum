@@ -1,13 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../../contexts/ToastContext';
+import { BottomSheet } from '../BottomSheet';
 import { formatFileSize } from '../../utils/format';
-
-interface TorrentFile {
-  index: number;
-  path: string;
-  size: number;
-}
+import { getTorrentMetadata, type TorrentFile } from '../../api/torrent';
+import { createDownload } from '../../api/downloads';
 
 interface SearchResult {
   title: string;
@@ -38,41 +35,31 @@ export function SearchAddModal({ result, contentType, onClose }: SearchAddModalP
     return () => { mountedRef.current = false; };
   }, []);
 
-  function fetchMetadata() {
+  const fetchMetadata = useCallback(() => {
     setLoading(true);
     setError(null);
     setData(null);
 
-    fetch('/api/torrent/metadata', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ magnet: result.magnet ?? null, torrent_url: result.torrent_url ?? null }),
-    })
-      .then(async (res) => {
-        const json = await res.json().catch(() => null);
+    getTorrentMetadata({ magnet: result.magnet, torrent_url: result.torrent_url })
+      .then((meta) => {
         if (!mountedRef.current) return;
-        if (!res.ok) {
-          const errMsg = typeof json?.detail === 'string'
-            ? json.detail
-            : (json?.detail ? JSON.stringify(json.detail) : res.statusText || 'Erro ao obter arquivos');
-          setError(errMsg);
-          return;
-        }
-        const files = (json?.files ?? []) as TorrentFile[];
-        setData(json ? { name: json.name ?? result.title, files } : null);
-        setIncluded(new Set(files.map((f) => f.index)));
+        setData({ name: meta.name ?? result.title, files: meta.files });
+        setIncluded(new Set(meta.files.map((f) => f.index)));
       })
       .catch((err) => {
-        if (mountedRef.current) setError(err instanceof Error ? err.message : 'Erro de rede');
+        if (mountedRef.current) {
+          const msg = err instanceof Error ? err.message : 'Erro de rede';
+          setError(typeof msg === 'string' ? msg : 'Erro ao obter arquivos');
+        }
       })
       .finally(() => {
         if (mountedRef.current) setLoading(false);
       });
-  }
+  }, [result]);
 
   useEffect(() => {
     fetchMetadata();
-  }, [result]);
+  }, [fetchMetadata]);
 
   function toggleFile(index: number) {
     setIncluded((prev) => {
@@ -89,24 +76,19 @@ export function SearchAddModal({ result, contentType, onClose }: SearchAddModalP
   }
 
   async function handleConfirm() {
-    const link = result.magnet || result.torrent_url;
-    if (!link || !data || submitting) return;
+    if ((!result.magnet && !result.torrent_url) || !data || submitting) return;
     setSubmitting(true);
     const excluded_file_indices = data.files.map((f) => f.index).filter((i) => !included.has(i));
     try {
-      const res = await fetch('/api/downloads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          magnet: link,
-          name: result.title,
-          content_type: contentType,
-          start_now: true,
-          excluded_file_indices,
-          torrent_files: data.files,
-        }),
+      await createDownload({
+        magnet: result.magnet || null,
+        torrent_url: result.torrent_url || null,
+        name: result.title,
+        content_type: contentType,
+        start_now: true,
+        excluded_file_indices,
+        torrent_files: data.files,
       });
-      if (!res.ok) throw new Error(await res.text());
       onClose();
       showToast('Download adicionado à fila.', 4000);
       navigate('/downloads');
@@ -118,53 +100,47 @@ export function SearchAddModal({ result, contentType, onClose }: SearchAddModalP
   }
 
   return (
-    <div className="search-files-modal-backdrop" onClick={onClose} aria-hidden>
-      <div className="search-add-modal search-files-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-labelledby="add-modal-title" aria-modal="true">
-        <div className="search-files-modal-header">
-          <h2 id="add-modal-title">Adicionar à fila</h2>
-          <button type="button" className="search-files-modal-close" onClick={onClose} aria-label="Fechar">×</button>
-        </div>
-        <div className="search-files-modal-body">
-          {loading && <p className="search-files-modal-loading">Obtendo lista de arquivos…</p>}
-          {error && (
-            <div className="search-files-modal-error-wrap" role="alert">
-              <p className="search-files-modal-error">{error}</p>
-              <button type="button" className="primary add-btn" onClick={fetchMetadata}>Tentar novamente</button>
+    <BottomSheet open title="Adicionar à fila" onClose={onClose} showCloseButton>
+      <>
+        {loading && <p className="search-files-modal-loading">Obtendo lista de arquivos…</p>}
+        {error && (
+          <div className="search-files-modal-error-wrap" role="alert">
+            <p className="search-files-modal-error">{error}</p>
+            <button type="button" className="atum-btn atum-btn-primary" onClick={fetchMetadata}>Tentar novamente</button>
+          </div>
+        )}
+        {!loading && !error && data && (
+          <>
+            <p className="search-files-modal-name">{data.name || result.title}</p>
+            <div className="search-add-modal-actions-row">
+              <button type="button" className="atum-btn" onClick={() => setIncludeAll(true)}>Selecionar todos</button>
+              <button type="button" className="atum-btn" onClick={() => setIncludeAll(false)}>Desmarcar todos</button>
             </div>
-          )}
-          {!loading && !error && data && (
-            <>
-              <p className="search-files-modal-name">{data.name || result.title}</p>
-              <div className="search-add-modal-actions-row">
-                <button type="button" className="secondary add-btn" onClick={() => setIncludeAll(true)}>Selecionar todos</button>
-                <button type="button" className="secondary add-btn" onClick={() => setIncludeAll(false)}>Desmarcar todos</button>
-              </div>
-              <ul className="search-files-list">
-                {data.files.map((f) => (
-                  <li key={f.index} className="search-files-item search-add-file-item">
-                    <label className="search-add-file-label">
-                      <input
-                        type="checkbox"
-                        checked={included.has(f.index)}
-                        onChange={() => toggleFile(f.index)}
-                        aria-label={`Incluir ${f.path}`}
-                      />
-                      <span className="search-files-path">{f.path}</span>
-                      <span className="search-files-size">{formatFileSize(f.size)}</span>
-                    </label>
-                  </li>
-                ))}
-              </ul>
-              <div className="search-add-modal-footer">
-                <button type="button" className="secondary add-btn" onClick={onClose}>Cancelar</button>
-                <button type="button" className="primary add-btn" disabled={submitting} onClick={handleConfirm}>
-                  {submitting ? '…' : 'Adicionar à fila'}
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+            <ul className="search-files-list">
+              {data.files.map((f) => (
+                <li key={f.index} className="search-files-item search-add-file-item">
+                  <label className="search-add-file-label">
+                    <input
+                      type="checkbox"
+                      checked={included.has(f.index)}
+                      onChange={() => toggleFile(f.index)}
+                      aria-label={`Incluir ${f.path}`}
+                    />
+                    <span className="search-files-path">{f.path}</span>
+                    <span className="search-files-size">{formatFileSize(f.size)}</span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+            <div className="search-add-modal-footer">
+              <button type="button" className="atum-btn" onClick={onClose}>Cancelar</button>
+              <button type="button" className="atum-btn atum-btn-primary" disabled={submitting} onClick={handleConfirm}>
+                {submitting ? '…' : 'Adicionar à fila'}
+              </button>
+            </div>
+          </>
+        )}
+      </>
+    </BottomSheet>
   );
 }

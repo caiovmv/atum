@@ -36,11 +36,12 @@ def _row_to_dict(row: dict) -> dict:
 
 # Importação relativa ao app (runner roda como processo separado com src no path)
 from ..deps import get_settings, get_repo
-from ..torrent_metadata import fetch_metadata_from_torrent_url, fetch_torrent_metadata
+from ..torrent_metadata import fetch_torrent_metadata
 from ..download_manager import (
     add as dm_add,
     delete as dm_delete,
     list_downloads as dm_list,
+    retry as dm_retry,
     start as dm_start,
     stop as dm_stop,
 )
@@ -49,13 +50,13 @@ app = FastAPI(title="dl-torrent Download Runner", version="0.1.0")
 
 
 class AddDownloadBody(BaseModel):
-    magnet: str
+    magnet: str | None = None
+    torrent_url: str | None = None
     save_path: str | None = None
     name: str | None = None
     content_type: str | None = None
     start_now: bool = True
     excluded_file_indices: list[int] | None = None
-    """Lista opcional de arquivos do torrent [{index, path, size}] para listagem consistente pós-download."""
     torrent_files: list[dict] | None = None
 
 
@@ -70,20 +71,69 @@ _KEEPALIVE_INTERVAL = 30.0
 
 
 async def _stream_downloads_events(status: str | None = None):
-    """Generator SSE: envia lista de downloads a cada 1s; keepalive a cada 30s."""
+    """Generator SSE: Pub/Sub + polling adaptativo.
+
+    Escuta eventos do CHANNEL_DOWNLOADS para reagir a mudanças de estado.
+    Mantém polling adaptativo como garantia para progresso contínuo.
+    Envia apenas quando os dados mudam (delta detection via hash).
+    """
+    import hashlib
+
+    last_hash = ""
+
+    async def _snapshot():
+        nonlocal last_hash
+        rows = await asyncio.to_thread(dm_list, status_filter=status)
+        data = [_row_to_dict(r) for r in rows]
+        current_hash = hashlib.md5(json.dumps(data, sort_keys=True, default=str).encode()).hexdigest()
+        if current_hash != last_hash:
+            last_hash = current_hash
+            return f"data: {json.dumps(data)}\n\n"
+        return None
+
     try:
-        iterations = 0
+        initial = await _snapshot()
+        if initial:
+            yield initial
+
+        from ..event_bus import CHANNEL_DOWNLOADS, async_subscribe
+        sub_task = None
+        event_queue: asyncio.Queue[bool] = asyncio.Queue()
+
+        async def _listen():
+            try:
+                async for channel, _ in async_subscribe(CHANNEL_DOWNLOADS, keepalive_interval=_KEEPALIVE_INTERVAL):
+                    if channel:
+                        await event_queue.put(True)
+            except (asyncio.CancelledError, GeneratorExit):
+                pass
+
+        sub_task = asyncio.create_task(_listen())
+        keepalive_counter = 0
+
         while True:
-            rows = await asyncio.to_thread(dm_list, status_filter=status)
-            data = [_row_to_dict(r) for r in rows]
-            yield f"data: {json.dumps(data)}\n\n"
-            iterations += 1
-            if iterations >= _KEEPALIVE_INTERVAL:
-                yield ": keepalive\n\n"
-                iterations = 0
-            await asyncio.sleep(1)
+            try:
+                await asyncio.wait_for(event_queue.get(), timeout=2.0)
+                while not event_queue.empty():
+                    event_queue.get_nowait()
+            except asyncio.TimeoutError:
+                pass
+
+            msg = await _snapshot()
+            if msg:
+                yield msg
+                keepalive_counter = 0
+            else:
+                keepalive_counter += 1
+                if keepalive_counter >= 15:
+                    yield ": keepalive\n\n"
+                    keepalive_counter = 0
+
     except (asyncio.CancelledError, GeneratorExit):
         pass
+    finally:
+        if sub_task and not sub_task.done():
+            sub_task.cancel()
 
 
 @app.get("/downloads/events")
@@ -112,6 +162,12 @@ def get_download(download_id: int) -> dict:
 @app.post("/downloads")
 def add_download(body: AddDownloadBody) -> dict:
     """Adiciona um download à fila. save_path vazio usa LIBRARY_MUSIC_PATH ou LIBRARY_VIDEOS_PATH por content_type."""
+    magnet = (body.magnet or "").strip()
+    torrent_url = (body.torrent_url or "").strip()
+    if not magnet and not torrent_url:
+        raise HTTPException(status_code=400, detail="Informe magnet ou torrent_url.")
+    # Garante que o campo magnet nunca fique vazio no DB (fallback para torrent_url)
+    magnet_for_db = magnet or torrent_url
     s = get_settings()
     path = (body.save_path or "").strip()
     if not path:
@@ -119,12 +175,13 @@ def add_download(body: AddDownloadBody) -> dict:
     else:
         path = str(Path(path).expanduser().resolve())
     did = dm_add(
-        body.magnet.strip(),
+        magnet_for_db,
         path,
         name=body.name,
         content_type=body.content_type,
         excluded_file_indices=body.excluded_file_indices,
         torrent_files=body.torrent_files,
+        torrent_url=torrent_url or None,
     )
     if did <= 0:
         raise HTTPException(status_code=500, detail="Erro ao adicionar à fila.")
@@ -150,6 +207,17 @@ def stop_download(download_id: int) -> dict:
     if dm_stop(download_id):
         return {"id": download_id, "stopped": True}
     raise HTTPException(status_code=404, detail="ID não encontrado.")
+
+
+@app.post("/downloads/{download_id}/retry")
+def retry_download(download_id: int) -> dict:
+    """Re-tenta um download falhado (reseta status, re-usa magnet/torrent_url persistidos)."""
+    if dm_retry(download_id):
+        return {"id": download_id, "retried": True}
+    raise HTTPException(
+        status_code=404,
+        detail="ID não encontrado ou download não está em status 'failed'.",
+    )
 
 
 @app.delete("/downloads/{download_id}")
@@ -219,48 +287,67 @@ class TorrentMetadataBody(BaseModel):
 
 @app.post("/torrent/metadata")
 def get_torrent_metadata(body: TorrentMetadataBody) -> dict:
-    """Retorna nome e lista de arquivos do torrent. Aceita magnet ou torrent_url (URL do .torrent)."""
-    magnet = (body.magnet or "").strip()
-    torrent_url = (body.torrent_url or "").strip()
+    """Retorna nome e lista de arquivos do torrent. Aceita magnet ou torrent_url.
+    Usa torrent_resolver para resolução com fallback (torrent_url -> magnet)."""
+    from ..torrent_resolver import cleanup_temp_file, resolve_torrent_input
+    from ..torrent_metadata import parse_torrent_bytes
 
-    # Preferir torrent_url: não depende de DHT, funciona em Docker
-    if torrent_url and torrent_url.startswith(("http://", "https://")):
-        try:
-            result = fetch_metadata_from_torrent_url(torrent_url, timeout_seconds=30)
-        except Exception as e:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Erro ao obter metadados do .torrent: {e!s}",
-            ) from e
+    magnet = (body.magnet or "").strip() or None
+    torrent_url = (body.torrent_url or "").strip() or None
+
+    if not magnet and not torrent_url:
+        raise HTTPException(
+            status_code=400,
+            detail="Informe magnet ou torrent_url (URL do arquivo .torrent).",
+        )
+
+    # Tentar via resolver (torrent_url primeiro, fallback magnet)
+    temp_path: str | None = None
+    try:
+        resolved_input, temp_path = resolve_torrent_input(
+            magnet=magnet, torrent_url=torrent_url
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    try:
+        # Se resolveu para arquivo .torrent (temp_path != None), parsear diretamente
+        if temp_path:
+            with open(temp_path, "rb") as f:
+                data = f.read()
+            result = parse_torrent_bytes(data)
+            if result is None:
+                raise HTTPException(
+                    status_code=502,
+                    detail="Não foi possível ler o arquivo .torrent baixado.",
+                )
+            return result
+
+        # Resolveu para magnet: usar DHT para obter metadados
+        if resolved_input.startswith("magnet:"):
+            timeout_seconds = 120
+            result = fetch_torrent_metadata(resolved_input, timeout_seconds=timeout_seconds)
+            if result is None:
+                result = fetch_torrent_metadata(resolved_input, timeout_seconds=timeout_seconds)
+            if result is None:
+                raise HTTPException(
+                    status_code=504,
+                    detail="Timeout ou falha ao obter metadados do magnet. Tente novamente.",
+                )
+            return result
+
+        # Resolveu para path local de .torrent
+        with open(resolved_input, "rb") as f:
+            data = f.read()
+        result = parse_torrent_bytes(data)
         if result is None:
             raise HTTPException(
                 status_code=502,
-                detail="Não foi possível baixar ou ler o arquivo .torrent na URL informada.",
+                detail="Não foi possível ler o arquivo .torrent.",
             )
         return result
-
-    if magnet and magnet.startswith("magnet:"):
-        timeout_seconds = 120
-        try:
-            result = fetch_torrent_metadata(magnet, timeout_seconds=timeout_seconds)
-            if result is None:
-                result = fetch_torrent_metadata(magnet, timeout_seconds=timeout_seconds)  # retry
-        except Exception as e:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Erro ao obter metadados: {e!s}",
-            ) from e
-        if result is None:
-            raise HTTPException(
-                status_code=504,
-                detail="Timeout ou falha ao obter metadados do magnet. Tente novamente.",
-            )
-        return result
-
-    raise HTTPException(
-        status_code=400,
-        detail="Informe magnet ou torrent_url (URL do arquivo .torrent).",
-    )
+    finally:
+        cleanup_temp_file(temp_path)
 
 
 def _media_type_for_path(path: Path) -> str:
@@ -344,7 +431,7 @@ def stream_download(download_id: int, file_index: int | None = None):
     if not path or not path.is_file():
         raise HTTPException(status_code=404, detail="Arquivo não encontrado.")
     media_type = _media_type_for_path(path)
-    return FileResponse(str(path), media_type=media_type)
+    return FileResponse(str(path), media_type=media_type, headers={"Cache-Control": "public, max-age=3600"})
 
 
 def _content_path_allowed(content_path: str) -> bool:
@@ -386,4 +473,4 @@ def stream_library_import(content_path: str = "", file_index: int | None = None)
     if not path or not path.is_file():
         raise HTTPException(status_code=404, detail="Arquivo de mídia não encontrado.")
     media_type = _media_type_for_path(path)
-    return FileResponse(str(path), media_type=media_type)
+    return FileResponse(str(path), media_type=media_type, headers={"Cache-Control": "public, max-age=3600"})

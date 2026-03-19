@@ -57,7 +57,7 @@
 .atum-library-tab--active {
   background: var(--atum-accent);
   border-color: var(--atum-accent);
-  color: #000;
+  color: var(--atum-text-on-accent);
 }
 
 .atum-library-tab:hover {
@@ -103,7 +103,7 @@
 .atum-library-facet-chip--active {
   background: var(--atum-accent);
   border-color: var(--atum-accent);
-  color: #000;
+  color: var(--atum-text-on-accent);
 }
 
 .atum-library-facet-chip:hover {
@@ -125,13 +125,42 @@
   border-radius: 24px;
   background: var(--atum-card);
   color: var(--atum-text);
-  min-height: 44px;
+  min-height: var(--touch-target-min);
 }
 
 .atum-library-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 0.75rem;
+}
+
+.atum-library-grid .media-card {
+  padding: 0.5rem;
+}
+
+.atum-library-grid .media-card-title {
+  font-size: 0.85rem;
+  margin-bottom: 0.35rem;
+}
+
+.atum-library-grid .media-card-meta {
+  font-size: 0.75rem;
+  margin-bottom: 0.5rem;
+  gap: 0.35rem;
+}
+
+.atum-library-grid .media-card-cover-wrap {
+  margin-bottom: 0.5rem;
+  border-radius: 6px;
+}
+
+.atum-library-grid .media-card-cover-hover-action .media-card-play-btn {
+  width: 40px;
+  height: 40px;
+}
+
+.atum-library-grid--videos {
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
 }
 
 .atum-library-card {
@@ -185,25 +214,10 @@
   padding-top: 0.5rem;
 }
 
-.atum-btn {
-  padding: 0.5rem 0.75rem;
+/* atum-btn centralizado em index.css; Library usa pill shape */
+.atum-library-card-actions .atum-btn,
+.atum-library-video-kind .atum-btn {
   border-radius: 999px;
-  border: 1px solid var(--atum-border);
-  background: var(--atum-card);
-  color: var(--atum-text);
-  cursor: pointer;
-  font-size: 0.9rem;
-  transition: background 0.2s, filter 0.2s;
-}
-
-.atum-btn-primary {
-  background: var(--atum-accent);
-  border-color: var(--atum-accent);
-  color: #000;
-}
-
-.atum-btn:hover {
-  filter: brightness(1.1);
 }
 
 .atum-library-card-actions .atum-btn {
@@ -219,32 +233,6 @@
 
 .atum-library-card-actions-inner .atum-btn-primary {
   flex: 1;
-}
-
-.atum-library-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: 1rem;
-}
-
-.atum-library-video-kind .atum-btn {
-  border-radius: 999px;
-}
-
-.atum-library-modal {
-  background: var(--atum-card);
-  border: 1px solid var(--atum-border);
-  border-radius: 12px;
-  padding: 1.5rem;
-  max-width: 420px;
-  width: 100%;
-  max-height: 90vh;
-  overflow: auto;
 }
 
 .atum-library-modal-title {
@@ -291,4 +279,322 @@
 .atum-btn:focus-visible {
   outline: 2px solid var(--atum-accent);
   outline-offset: 2px;
+}
+
+.library-skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 1rem;
+  padding: 1rem 0;
+}
+
+.library-fetch-error {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: var(--atum-error);
+}
+
+.library-fetch-error p {
+  margin: 0 0 1rem;
+}
+
+.atum-library-edit-play-btn {
+  flex: 1;
+}
+
+.atum-library-cover-hint {
+  font-size: 0.85rem;
+  color: var(--atum-muted);
+  margin-bottom: 0.75rem;
+}
+
+.atum-library-cover-result {
+  font-size: 0.85rem;
+  margin-bottom: 0.75rem;
+}
+
+.atum-library-cover-result--ok {
+  color: var(--atum-success);
+}
+
+.atum-library-cover-result--error {
+  color: var(--atum-error);
+}
+
+.atum-library-view-mode-label {
+  margin-left: 1rem;
+}
+
+.atum-library-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.5rem 0;
+}
+
+.atum-library-list-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--atum-card);
+  border: 1px solid var(--atum-border);
+  border-radius: 8px;
+  min-height: var(--touch-target-min);
+}
+
+.atum-library-list-cover {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--atum-bg);
+}
+
+.atum-library-list-cover .cover-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.atum-library-list-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.atum-library-list-title {
+  font-weight: 500;
+  font-size: 0.95rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.atum-library-list-meta {
+  font-size: 0.8rem;
+  color: var(--atum-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.atum-library-list-actions {
+  display: flex;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.atum-library-info-btn {
+  padding: 0.35rem;
+  border: none;
+  background: transparent;
+  color: var(--atum-muted);
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--touch-target-min);
+  min-width: var(--touch-target-min);
+}
+
+.atum-library-info-btn:hover {
+  color: var(--atum-accent);
+  background: var(--atum-hover);
+}
+
+.atum-library-detail {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.atum-library-detail-cover {
+  flex-shrink: 0;
+  width: 160px;
+  height: 160px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--atum-bg);
+}
+
+.atum-library-detail-cover .cover-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.atum-library-detail-cover {
+  position: relative;
+}
+
+.atum-library-cover-upload-input {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  overflow: hidden;
+}
+
+.atum-library-detail-cover-actions {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.atum-library-cover-upload-btn {
+  font-size: 0.85rem;
+}
+
+.atum-library-cover-upload-error {
+  font-size: 0.8rem;
+  color: var(--atum-error, #dc3545);
+  margin: 0;
+}
+
+.atum-library-ai-btn-label {
+  margin-left: 0.25rem;
+}
+
+@media (max-width: 599px) {
+  .atum-library-ai-btn-label {
+    display: none;
+  }
+}
+
+.atum-library-ai-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 1rem;
+  background: var(--atum-accent-08, rgba(59, 130, 246, 0.08));
+  border: 1px solid var(--atum-accent);
+  border-radius: var(--radius-md, 8px);
+  font-size: 0.9rem;
+}
+
+.atum-library-ai-badge-explanation {
+  color: var(--atum-muted);
+  font-size: 0.85rem;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.atum-library-ai-clear {
+  margin-left: auto;
+  font-size: 0.85rem;
+}
+
+.atum-library-detail-meta {
+  flex: 1;
+  min-width: 200px;
+}
+
+.atum-library-detail-title {
+  font-size: 1.25rem;
+  margin: 0 0 0.75rem;
+}
+
+.atum-library-detail-list {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.25rem 1rem;
+  font-size: 0.9rem;
+  margin: 0 0 1rem;
+}
+
+.atum-library-detail-list dt {
+  color: var(--atum-muted);
+  margin: 0;
+}
+
+.atum-library-detail-list dd {
+  margin: 0;
+}
+
+.atum-library-detail-section {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--atum-border);
+}
+
+.atum-library-detail-section-title {
+  font-size: 0.9rem;
+  color: var(--atum-muted);
+  margin: 0 0 0.5rem;
+}
+
+.atum-library-detail-path {
+  word-break: break-all;
+  font-size: 0.85rem;
+}
+
+.atum-library-detail-files {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 0.9rem;
+}
+
+.atum-library-detail-streams-title {
+  font-size: 0.85rem;
+  margin: 0.5rem 0 0.25rem;
+}
+
+.atum-library-detail-stream {
+  font-size: 0.85rem;
+  color: var(--atum-muted);
+}
+
+@media (max-width: 599px) {
+  .atum-library-header {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .atum-library-title {
+    font-size: 1.25rem;
+  }
+  .atum-library-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 0.5rem;
+  }
+  .atum-library-grid--videos {
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  }
+  .atum-library-filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .atum-library-filters input,
+  .atum-library-filters select {
+    width: 100%;
+  }
+  .atum-library-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .atum-library-tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .library-skeleton-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  }
+}
+
+@media (min-width: 600px) and (max-width: 899px) {
+  .atum-library-grid {
+    grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
+  }
+  .atum-library-grid--videos {
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  }
 }

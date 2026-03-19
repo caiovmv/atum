@@ -109,8 +109,10 @@ def enrich_video_item(item: dict) -> VideoEnrichmentResult:
         if enriched.year and not year:
             result.year = enriched.year
 
-        # Buscar capa se o item não tem
+        # Buscar capa se o item não tem (downloads em paralelo)
         if not item.get("cover_path_small") and enriched.poster_url:
+            from concurrent.futures import ThreadPoolExecutor
+
             from ..deps import get_settings
             try:
                 covers_path = get_settings().covers_path
@@ -121,12 +123,15 @@ def enrich_video_item(item: dict) -> VideoEnrichmentResult:
                 poster_small = enriched.poster_url
                 poster_large = enriched.poster_url.replace("/w500", "/w780") if enriched.poster_url else None
 
-                if _download_cover(poster_small, small_file):
-                    result.cover_path_small = str(small_file)
-                if poster_large and _download_cover(poster_large, large_file):
-                    result.cover_path_large = str(large_file)
-                elif result.cover_path_small:
-                    result.cover_path_large = result.cover_path_small
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    f_small = pool.submit(_download_cover, poster_small, small_file)
+                    f_large = pool.submit(_download_cover, poster_large, large_file) if poster_large else None
+                    if f_small.result():
+                        result.cover_path_small = str(small_file)
+                    if f_large and f_large.result():
+                        result.cover_path_large = str(large_file)
+                    elif result.cover_path_small:
+                        result.cover_path_large = result.cover_path_small
             except Exception as e:
                 logger.debug("Cover download error: %s", e)
 

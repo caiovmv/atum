@@ -1,54 +1,22 @@
-"""Worker que roda em thread ou subprocesso para um download (libtorrent direto ou TorrentP fallback). Atualiza status no DB."""
+"""Worker que roda em thread ou subprocesso para um download (libtorrent direto). Atualiza status no DB."""
 
 from __future__ import annotations
 
 import logging
 import os
 import sys
-import tempfile
 import time
-import urllib.request
 from pathlib import Path
 from threading import Event as ThreadEvent
 from threading import Thread
 
 from .domain import DownloadStatus
+from .torrent_resolver import cleanup_temp_file, resolve_torrent_input
 
 logger = logging.getLogger(__name__)
 
-# Rate-limit: não persistir progresso mais que uma vez por segundo por download_id
 _LAST_PROGRESS_WRITE: dict[int, float] = {}
 _MIN_PERSIST_INTERVAL = 1.0
-
-
-def _resolve_torrent_input(magnet_or_url: str) -> tuple[str, str | None]:
-    """Converte magnet ou URL de .torrent para o que o TorrentDownloader aceita.
-    Retorna (path_ou_magnet, path_temp_para_apagar ou None).
-    Se for URL http(s), baixa o .torrent para um arquivo temporário e retorna (path, path).
-    """
-    s = (magnet_or_url or "").strip()
-    if not s:
-        raise ValueError("Link vazio")
-    if s.startswith("magnet:"):
-        return s, None
-    if s.startswith(("http://", "https://")):
-        req = urllib.request.Request(s, headers={"User-Agent": "dl-torrent/1.0"})
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            data = resp.read()
-        fd, path = tempfile.mkstemp(suffix=".torrent")
-        try:
-            os.write(fd, data)
-            os.close(fd)
-            return path, path
-        except Exception:
-            os.close(fd)
-            try:
-                os.unlink(path)
-            except OSError:
-                pass
-            raise
-    # Path local
-    return s, None
 
 
 def _update_progress_from_status(download_id: int, status: object) -> None:
@@ -71,7 +39,7 @@ def _update_progress_from_status(download_id: int, status: object) -> None:
         num_peers = getattr(status, "num_peers", 0) or 0
         num_seeds = getattr(status, "num_seeds", None)
         if num_seeds is None:
-            num_seeds = getattr(status, "num_connections", None)  # fallback
+            num_seeds = getattr(status, "num_connections", None)
         download_rate = getattr(status, "download_rate", 0) or 0
 
         progress = (100.0 * total_done / total_wanted) if total_wanted else 0.0
@@ -96,7 +64,7 @@ def _update_progress_from_status(download_id: int, status: object) -> None:
 
 def run_worker(download_id: int, stop_event: ThreadEvent | None = None) -> None:
     """Executa o download do registro `download_id` e atualiza o DB.
-    Se stop_event for passado (modo thread), verifica periodicamente e para se stop_event.set() for chamado.
+    Usa torrent_resolver para resolução com fallback (torrent_url -> magnet).
     """
     from .deps import get_repo
 
@@ -107,8 +75,16 @@ def run_worker(download_id: int, stop_event: ThreadEvent | None = None) -> None:
     if row["status"] not in (DownloadStatus.QUEUED.value, DownloadStatus.PAUSED.value):
         return
 
-    magnet_or_url = row["magnet"]
+    magnet = row["magnet"]
+    torrent_url = row.get("torrent_url")
     save_path = row["save_path"]
+
+    logger.info(
+        "Worker iniciando download_id=%s (magnet=%s, torrent_url=%s)",
+        download_id,
+        "sim" if magnet else "não",
+        "sim" if torrent_url else "não",
+    )
 
     repo.update_status(download_id, DownloadStatus.DOWNLOADING.value)
     if stop_event is None:
@@ -122,9 +98,11 @@ def run_worker(download_id: int, stop_event: ThreadEvent | None = None) -> None:
     stopped_by_user = False
     completed_success = False
     try:
-        torrent_input, temp_path_to_remove = _resolve_torrent_input(magnet_or_url)
+        torrent_input, temp_path_to_remove = resolve_torrent_input(
+            magnet=magnet, torrent_url=torrent_url
+        )
+        logger.info("Download %s: input resolvido -> %s", download_id, "arquivo .torrent" if temp_path_to_remove else "magnet")
 
-        # Libtorrent direto (DHT, trackers, porta configuráveis). Sem fallback TorrentP.
         try:
             from .client.libtorrent_engine import run_download
         except ImportError as e:
@@ -158,16 +136,17 @@ def run_worker(download_id: int, stop_event: ThreadEvent | None = None) -> None:
             stopped_by_user = True
         elif success:
             completed_success = True
+            logger.info("Download %s concluído com sucesso (name=%s)", download_id, torrent_name)
             repo.update_status(download_id, DownloadStatus.COMPLETED.value, progress=100.0)
             repo.update_progress(download_id, progress=100.0, eta_seconds=0.0)
             if torrent_name and str(torrent_name).strip():
                 content_path = str(Path(save_path) / str(torrent_name).strip())
                 repo.set_content_path(download_id, content_path)
         else:
+            logger.warning("Download %s falhou (success=False, stopped=%s)", download_id, stopped_by_user)
             repo.update_status(download_id, DownloadStatus.FAILED.value, error_message="Download falhou ou timeout ao obter metadados.")
 
         if not stopped_by_user and completed_success:
-            # Notificação: download concluído
             name = (row.get("name") or "").strip()
             try:
                 from .db import notification_create
@@ -189,7 +168,6 @@ def run_worker(download_id: int, stop_event: ThreadEvent | None = None) -> None:
                         logger.debug("Falha ao buscar capa para download %s: %s", download_id, exc)
                 t = Thread(target=_fetch_cover, daemon=True)
                 t.start()
-            # Pós-processamento (organizar arquivos, enriquecer TMDB/IMDB)
             cp = repo.get(download_id)
             final_content_path = (cp.get("content_path") or "").strip() if cp else ""
             if final_content_path:
@@ -205,6 +183,7 @@ def run_worker(download_id: int, stop_event: ThreadEvent | None = None) -> None:
         if stop_event and stop_event.is_set():
             stopped_by_user = True
         else:
+            logger.error("Download %s falhou com exceção: %s", download_id, e)
             repo.update_status(download_id, DownloadStatus.FAILED.value, error_message=f"{type(e).__name__}: {e}")
             try:
                 from .db import notification_create
@@ -222,11 +201,7 @@ def run_worker(download_id: int, stop_event: ThreadEvent | None = None) -> None:
         os.environ.pop("DL_TORRENT_DOWNLOAD_ID", None)
         if (stop_event and stop_event.is_set()) or stopped_by_user:
             repo.update_status(download_id, DownloadStatus.PAUSED.value)
-        if temp_path_to_remove and os.path.isfile(temp_path_to_remove):
-            try:
-                os.unlink(temp_path_to_remove)
-            except OSError:
-                pass
+        cleanup_temp_file(temp_path_to_remove)
 
 
 if __name__ == "__main__":

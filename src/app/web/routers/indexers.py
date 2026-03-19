@@ -25,22 +25,26 @@ _KEEPALIVE_INTERVAL = 30.0
 
 
 async def _stream_indexer_events():
-    """Generator SSE: envia status dos indexadores a cada 60 s; keepalive a cada 30s."""
+    """Generator SSE: escuta Redis Pub/Sub para status dos indexadores."""
+    from ...event_bus import CHANNEL_INDEXERS, async_subscribe
+
+    s = get_settings()
+    status = await asyncio.to_thread(get_indexer_status, s.redis_url or None)
+    yield f"data: {json.dumps(status)}\n\n"
+
     try:
-        while True:
-            s = get_settings()
-            status = await asyncio.to_thread(get_indexer_status, s.redis_url or None)
-            yield f"data: {json.dumps(status)}\n\n"
-            await asyncio.sleep(_KEEPALIVE_INTERVAL)
-            yield ": keepalive\n\n"
-            await asyncio.sleep(_KEEPALIVE_INTERVAL)
+        async for channel, data in async_subscribe(CHANNEL_INDEXERS, keepalive_interval=_KEEPALIVE_INTERVAL):
+            if channel and data:
+                yield f"data: {json.dumps(data)}\n\n"
+            else:
+                yield ": keepalive\n\n"
     except (asyncio.CancelledError, GeneratorExit):
         pass
 
 
 @router.get("/events")
 async def indexers_events():
-    """SSE: stream de status dos indexadores (atualização a cada 60 s)."""
+    """SSE: stream de status dos indexadores via Redis Pub/Sub."""
     return StreamingResponse(
         _stream_indexer_events(),
         media_type="text/event-stream",

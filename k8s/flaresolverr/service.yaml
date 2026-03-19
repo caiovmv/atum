@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: flaresolverr
+  namespace: atum
+  labels:
+    app.kubernetes.io/name: flaresolverr
+    app.kubernetes.io/component: proxy
+spec:
+  selector:
+    app.kubernetes.io/name: flaresolverr
+  ports:
+    - port: 8191
+      targetPort: 8191
+      name: http

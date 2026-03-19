@@ -1,5 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
+import { IoDownloadOutline } from 'react-icons/io5';
 import { useParams, useSearchParams, useLocation, useNavigate, Link } from 'react-router-dom';
+import { getLibraryItem, getLibraryItemFiles, type LibraryFile } from '../api/library';
+import { useToast } from '../contexts/ToastContext';
+import { useOfflineSave } from '../hooks/useOfflineSave';
+import { hasFileSystemAccessSupport } from '../utils/fileSystemAccess';
+import { SkeletonPlayer } from '../components/Skeleton';
 import './Player.css';
 
 interface RadioQueueItem {
@@ -13,19 +19,13 @@ interface RadioQueueItem {
   content_type?: string;
 }
 
-interface MediaFile {
-  index: number;
-  name: string;
-  size: number;
-}
-
 export function Player() {
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
   const [item, setItem] = useState<{ id: number; name?: string; content_type?: string; source?: string } | null>(null);
-  const [files, setFiles] = useState<MediaFile[]>([]);
+  const [files, setFiles] = useState<LibraryFile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -57,27 +57,21 @@ export function Player() {
       return;
     }
     const controller = new AbortController();
+    const signal = controller.signal;
     setLoading(true);
     setError(null);
-    const itemUrl = isImport ? `/api/library/imported/${numId}` : `/api/library/${numId}`;
-    const filesUrl = isImport ? `/api/library/imported/${numId}/files` : `/api/library/${numId}/files`;
     Promise.all([
-      fetch(itemUrl, { signal: controller.signal }).then((r) => {
-        if (!r.ok) throw new Error(r.status === 404 ? 'Item não encontrado.' : r.statusText);
-        return r.json();
-      }),
-      fetch(filesUrl, { signal: controller.signal }).then((r) => {
-        if (!r.ok) return { files: [] };
-        return r.json();
-      }),
+      getLibraryItem(numId, isImport, { signal }),
+      getLibraryItemFiles(numId, isImport, { signal }),
     ])
       .then(([itemData, filesData]) => {
         setItem(itemData);
-        setFiles(Array.isArray(filesData?.files) ? filesData.files : []);
+        setFiles(filesData.files);
       })
       .catch((err) => {
         if (err instanceof DOMException && err.name === 'AbortError') return;
-        setError(err instanceof Error ? err.message : 'Erro');
+        const msg = err instanceof Error ? err.message : 'Erro';
+        setError(msg.includes('404') ? 'Item não encontrado.' : msg);
       })
       .finally(() => setLoading(false));
     return () => controller.abort();
@@ -92,6 +86,13 @@ export function Player() {
   }, [item, files.length, fileIndex, isImport]);
 
   const isVideo = item?.content_type === 'movies' || item?.content_type === 'tv';
+  const { showToast } = useToast();
+  const { save, saving, progress } = useOfflineSave({
+    itemId: item?.id ?? 0,
+    isImport: item?.source === 'import',
+    onSuccess: (saved) => showToast(`${saved} arquivo(s) salvo(s) na pasta escolhida.`, 4000),
+    onError: (msg) => showToast(msg, 5000),
+  });
 
   const goNextRadio = () => {
     if (!nextItem) return;
@@ -118,7 +119,7 @@ export function Player() {
   if (loading) {
     return (
       <div className="atum-player">
-        <p className="atum-player-loading">Carregando…</p>
+        <SkeletonPlayer />
       </div>
     );
   }
@@ -198,6 +199,20 @@ export function Player() {
             </audio>
           )}
         </div>
+        {hasFileSystemAccessSupport() && (
+          <div className="atum-player-actions">
+            <button
+              type="button"
+              className="atum-btn atum-btn-ghost"
+              onClick={() => save()}
+              disabled={saving}
+              aria-label="Salvar para offline"
+            >
+              <IoDownloadOutline size={18} aria-hidden />
+              {saving && progress ? `Salvando ${progress.current}/${progress.total}…` : 'Salvar para offline'}
+            </button>
+          </div>
+        )}
       </div>
     );
   }
@@ -215,6 +230,20 @@ export function Player() {
           </audio>
         )}
       </div>
+      {hasFileSystemAccessSupport() && (
+        <div className="atum-player-actions">
+          <button
+            type="button"
+            className="atum-btn atum-btn-ghost"
+            onClick={() => save()}
+            disabled={saving}
+            aria-label="Salvar para offline"
+          >
+            <IoDownloadOutline size={18} aria-hidden />
+            {saving && progress ? `Salvando ${progress.current}/${progress.total}…` : 'Salvar para offline'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

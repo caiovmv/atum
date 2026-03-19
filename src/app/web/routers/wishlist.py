@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 from typing import Literal
 
 import httpx
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from ...deps import get_settings
 from ...search import DEFAULT_INDEXERS, get_magnet_for_result, search_all
@@ -25,24 +26,21 @@ _KEEPALIVE_INTERVAL = 30.0
 
 
 async def _stream_wishlist_events():
-    """Generator SSE: a cada 30 s verifica wishlist; se mudou envia wishlist_updated; keepalive a cada 30s."""
-    last_count = -1
+    """Generator SSE: escuta Redis Pub/Sub para eventos da wishlist."""
+    from ...event_bus import CHANNEL_WISHLIST, async_subscribe
     try:
-        while True:
-            terms = await asyncio.to_thread(wishlist_list_all)
-            count = len(terms) if isinstance(terms, list) else 0
-            if count != last_count:
-                last_count = count
+        async for channel, data in async_subscribe(CHANNEL_WISHLIST, keepalive_interval=_KEEPALIVE_INTERVAL):
+            if channel:
                 yield f"data: {json.dumps({'event': 'wishlist_updated'})}\n\n"
-            yield ": keepalive\n\n"
-            await asyncio.sleep(_KEEPALIVE_INTERVAL)
+            else:
+                yield ": keepalive\n\n"
     except (asyncio.CancelledError, GeneratorExit):
         pass
 
 
 @router.get("/events")
 async def wishlist_events():
-    """SSE: stream de eventos de atualização da wishlist (verificação a cada 30 s)."""
+    """SSE: stream de eventos da wishlist via Redis Pub/Sub."""
     return StreamingResponse(
         _stream_wishlist_events(),
         media_type="text/event-stream",
@@ -65,9 +63,18 @@ def _runner_url(path: str) -> str:
 
 
 @router.get("")
-def list_terms() -> list[dict]:
-    """Lista todos os termos da wishlist (id, term, created_at)."""
-    return wishlist_list_all()
+def list_terms(
+    request: Request,
+    limit: int | None = Query(None, ge=1, le=200, description="Máximo de termos a retornar"),
+    offset: int | None = Query(None, ge=0, description="Pular N termos"),
+):
+    """Lista todos os termos da wishlist (id, term, created_at). ETag para revalidação."""
+    data = wishlist_list_all(limit=limit, offset=offset)
+    body = json.dumps(data, default=str, ensure_ascii=False)
+    etag = hashlib.md5(body.encode()).hexdigest()
+    if request.headers.get("if-none-match") == f'"{etag}"':
+        return Response(status_code=304)
+    return Response(content=body, media_type="application/json", headers={"ETag": f'"{etag}"', "Cache-Control": "private, max-age=0, must-revalidate"})
 
 
 class AddTermBody(BaseModel):
@@ -83,6 +90,8 @@ def add_term(body: AddTermBody) -> dict:
     wid = wishlist_add_term(term)
     if wid <= 0:
         raise HTTPException(status_code=400, detail="Falha ao adicionar (termo duplicado ou inválido).")
+    from ...event_bus import CHANNEL_WISHLIST, publish
+    publish(CHANNEL_WISHLIST, {"type": "term_added", "id": wid})
     return {"id": wid}
 
 
@@ -92,6 +101,8 @@ def remove_term(term_id: int) -> dict:
     deleted = wishlist_delete_by_id(term_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Termo não encontrado.")
+    from ...event_bus import CHANNEL_WISHLIST, publish
+    publish(CHANNEL_WISHLIST, {"type": "term_deleted", "id": term_id})
     return {"ok": True}
 
 
@@ -123,12 +134,7 @@ def run_wishlist(body: WishlistRunBody) -> dict:
         return {"added": [], "errors": ["Nenhum termo para buscar (informe term_ids e/ou lines)."], "ok": 0, "fail": 1}
 
     indexer_list = list(DEFAULT_INDEXERS)
-    save_path = (
-        (body.save_path or "").strip()
-        or getattr(get_settings(), "download_dir", "")
-        or getattr(get_settings(), "watch_folder", "")
-        or "./downloads"
-    )
+    save_path = (body.save_path or "").strip() or get_settings().save_path_for_content_type(body.content_type)
     added: list[int] = []
     errors: list[str] = []
     for query in terms:

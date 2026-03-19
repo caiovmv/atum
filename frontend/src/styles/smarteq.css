@@ -20,7 +20,7 @@
   font-size: 0.5rem;
   font-weight: 400;
   letter-spacing: 0.06em;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--atum-vfd-ow-35);
   text-transform: uppercase;
   white-space: nowrap;
   flex-shrink: 0;
@@ -37,18 +37,18 @@
   letter-spacing: 0.08em;
   color: var(--vfd-color);
   background:
-    repeating-linear-gradient(91deg, rgba(255,255,255,0.01) 0px, transparent 1px, transparent 5px),
-    repeating-linear-gradient(89deg, rgba(255,255,255,0.014) 0px, transparent 1px, transparent 3px),
+    repeating-linear-gradient(91deg, var(--atum-vfd-ow-01) 0px, transparent 1px, transparent 5px),
+    repeating-linear-gradient(89deg, var(--atum-vfd-ow-014) 0px, transparent 1px, transparent 3px),
     linear-gradient(
       155deg,
-      rgba(255,255,255,0.03) 0%,
-      rgba(255,255,255,0.06) 30%,
-      rgba(255,255,255,0.025) 55%,
-      rgba(255,255,255,0.05) 80%,
-      rgba(255,255,255,0.02) 100%
+      var(--atum-vfd-ow-03) 0%,
+      var(--atum-vfd-ow-06) 30%,
+      var(--atum-vfd-ow-025) 55%,
+      var(--atum-vfd-ow-05) 80%,
+      var(--atum-vfd-ow-02) 100%
     ),
-    linear-gradient(180deg, #1c1c1c, #111111);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+    linear-gradient(180deg, var(--atum-vfd-bg-1c), var(--atum-vfd-bg-black));
+  border: 1px solid var(--atum-vfd-ow-06);
   border-radius: 3px;
   padding: 0.2rem 1.2rem 0.2rem 0.4rem;
   cursor: pointer;
@@ -56,9 +56,9 @@
   min-width: 0;
   flex: 1;
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.035),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+    0 1px 0 var(--atum-vfd-ow-035),
+    inset 0 1px 0 var(--atum-vfd-ow-04),
+    inset 0 -1px 0 var(--atum-vfd-ob-4);
   background-image:
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%2300e5c8' opacity='0.5'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
@@ -68,15 +68,15 @@
 }
 
 .smarteq-select:hover {
-  border-color: rgba(255, 255, 255, 0.12);
+  border-color: var(--atum-vfd-ow-12);
 }
 
 .smarteq-select:focus {
-  border-color: rgba(0, 229, 200, 0.25);
+  border-color: var(--atum-accent-25);
 }
 
 .smarteq-select option {
-  background: #111;
+  background: var(--atum-vfd-bg-black);
   color: var(--vfd-color);
 }
 
@@ -87,45 +87,45 @@
   align-items: center;
   gap: 0.3rem;
   padding: 0.2rem 0.5rem;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--atum-vfd-ow-06);
   border-radius: 3px;
   background:
-    repeating-linear-gradient(91deg, rgba(255,255,255,0.01) 0px, transparent 1px, transparent 5px),
-    repeating-linear-gradient(89deg, rgba(255,255,255,0.014) 0px, transparent 1px, transparent 3px),
+    repeating-linear-gradient(91deg, var(--atum-vfd-ow-01) 0px, transparent 1px, transparent 5px),
+    repeating-linear-gradient(89deg, var(--atum-vfd-ow-014) 0px, transparent 1px, transparent 3px),
     linear-gradient(
       155deg,
-      rgba(255,255,255,0.04) 0%,
-      rgba(255,255,255,0.06) 30%,
-      rgba(255,255,255,0.025) 55%,
-      rgba(255,255,255,0.05) 80%,
-      rgba(255,255,255,0.02) 100%
+      var(--atum-vfd-ow-04) 0%,
+      var(--atum-vfd-ow-06) 30%,
+      var(--atum-vfd-ow-025) 55%,
+      var(--atum-vfd-ow-05) 80%,
+      var(--atum-vfd-ow-02) 100%
     ),
-    linear-gradient(180deg, #1c1c1c, #111111);
+    linear-gradient(180deg, var(--atum-vfd-bg-1c), var(--atum-vfd-bg-black));
   cursor: pointer;
   transition: border-color 0.15s, box-shadow 0.15s;
   user-select: none;
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.035),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+    0 1px 0 var(--atum-vfd-ow-035),
+    inset 0 1px 0 var(--atum-vfd-ow-04),
+    inset 0 -1px 0 var(--atum-vfd-ob-4);
 }
 
 .smarteq-btn:hover {
-  border-color: rgba(255, 255, 255, 0.12);
+  border-color: var(--atum-vfd-ow-12);
 }
 
 .smarteq-btn:active {
   box-shadow:
-    inset 0 1px 3px rgba(0, 0, 0, 0.5),
-    inset 0 0 2px rgba(0, 0, 0, 0.3);
+    inset 0 1px 3px var(--atum-vfd-ob-5),
+    inset 0 0 2px var(--atum-vfd-ob-3);
 }
 
 .smarteq-btn--active {
-  border-color: rgba(0, 229, 200, 0.15);
+  border-color: var(--atum-accent-dim);
 }
 
 .smarteq-btn--apply {
-  border-color: rgba(0, 229, 200, 0.2);
+  border-color: var(--atum-accent-20);
 }
 
 .smarteq-btn-text {
@@ -133,7 +133,7 @@
   font-size: 0.45rem;
   font-weight: 400;
   letter-spacing: 0.06em;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--atum-vfd-ow-35);
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -142,18 +142,18 @@
 .smarteq-btn--apply .smarteq-btn-text {
   color: var(--vfd-color);
   text-shadow:
-    0 0 5px rgba(0, 229, 200, 0.5),
-    0 0 12px rgba(0, 229, 200, 0.2);
+    0 0 5px var(--atum-accent-scale),
+    0 0 12px var(--atum-accent-20);
 }
 
 .smarteq-btn-indicator {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: rgba(0, 229, 200, 0.18);
+  background: var(--atum-accent-20);
   box-shadow:
-    0 0 3px rgba(0, 229, 200, 0.1),
-    0 0 6px rgba(0, 229, 200, 0.05);
+    0 0 3px var(--atum-accent-10),
+    0 0 6px var(--atum-accent-05);
   flex-shrink: 0;
   transition: background 0.2s, box-shadow 0.2s;
 }
@@ -162,9 +162,9 @@
 .smarteq-btn-indicator--ready {
   background: var(--vfd-color);
   box-shadow:
-    0 0 3px rgba(0, 229, 200, 0.6),
-    0 0 8px rgba(0, 229, 200, 0.3),
-    0 0 14px rgba(0, 229, 200, 0.12);
+    0 0 3px var(--atum-accent-text),
+    0 0 8px var(--atum-accent-glow),
+    0 0 14px var(--atum-accent-12);
 }
 
 .smarteq-btn-indicator--pulse {
@@ -175,14 +175,14 @@
   0%, 100% {
     background: var(--vfd-color);
     box-shadow:
-      0 0 3px rgba(0, 229, 200, 0.6),
-      0 0 8px rgba(0, 229, 200, 0.3);
+      0 0 3px var(--atum-accent-text),
+      0 0 8px var(--atum-accent-glow);
   }
   50% {
-    background: rgba(0, 229, 200, 0.3);
+    background: var(--atum-accent-glow);
     box-shadow:
-      0 0 5px rgba(0, 229, 200, 0.9),
-      0 0 14px rgba(0, 229, 200, 0.5);
+      0 0 5px var(--atum-accent-90),
+      0 0 14px var(--atum-accent-scale);
   }
 }
 
@@ -217,13 +217,13 @@
 .smarteq-result-val--pos {
   color: var(--vfd-color);
   opacity: 0.8;
-  text-shadow: 0 0 4px rgba(0, 229, 200, 0.3);
+  text-shadow: 0 0 4px var(--atum-accent-glow);
 }
 
 .smarteq-result-val--neg {
-  color: #ff6b6b;
+  color: var(--atum-error);
   opacity: 0.7;
-  text-shadow: 0 0 4px rgba(255, 107, 107, 0.3);
+  text-shadow: 0 0 4px var(--atum-error-bg);
 }
 
 /* ─── Presets Dropdown ─── */
@@ -240,29 +240,29 @@
   font-size: 0.4rem;
   font-weight: 400;
   letter-spacing: 0.04em;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--atum-vfd-ow-4);
   text-transform: uppercase;
   white-space: nowrap;
   padding: 0.2rem 0.4rem;
-  border: 1px solid rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--atum-vfd-ow-04);
   border-radius: 2px;
   background:
-    linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    linear-gradient(180deg, var(--atum-vfd-ow-02), var(--atum-vfd-ow-01));
   cursor: pointer;
   transition: border-color 0.12s, color 0.12s, background 0.12s;
 }
 
 .smarteq-preset-btn:hover {
-  border-color: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.6);
+  border-color: var(--atum-vfd-ow-10);
+  color: var(--atum-vfd-ow-6);
 }
 
 .smarteq-preset-btn--active {
-  border-color: rgba(0, 229, 200, 0.15);
+  border-color: var(--atum-accent-dim);
   color: var(--vfd-color);
   background:
-    linear-gradient(180deg, rgba(0, 229, 200, 0.06), rgba(0, 229, 200, 0.02));
-  text-shadow: 0 0 5px rgba(0, 229, 200, 0.3);
+    linear-gradient(180deg, var(--atum-accent-06), var(--atum-accent-04));
+  text-shadow: 0 0 5px var(--atum-accent-glow);
 }
 
 /* ─── Smart EQ Toggle in Controls Stack ─── */
@@ -287,7 +287,7 @@
   flex-direction: column;
   gap: 0.5rem;
   padding: 0.4rem 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  border-top: 1px solid var(--atum-vfd-ow-04);
   margin-top: 0.25rem;
 }
 
@@ -296,7 +296,7 @@
   font-size: 0.45rem;
   font-weight: 400;
   letter-spacing: 0.04em;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--atum-vfd-ow-5);
   line-height: 1.4;
 }
 
@@ -317,12 +317,12 @@
   background: var(--vfd-color);
   border-radius: 2px;
   transition: width 0.15s ease;
-  box-shadow: 0 0 6px rgba(0, 229, 200, 0.3);
+  box-shadow: 0 0 6px var(--atum-accent-glow);
 }
 
 .smarteq-separator {
   height: 1px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--atum-vfd-ow-04);
   margin: 0.15rem 0;
 }
 
@@ -339,7 +339,7 @@
 
 .smarteq-ref-status--ready {
   opacity: 0.8;
-  text-shadow: 0 0 4px rgba(0, 229, 200, 0.3);
+  text-shadow: 0 0 4px var(--atum-accent-glow);
 }
 
 /* ═══════════════════════════════════════
@@ -405,4 +405,18 @@
   .smarteq-wizard-step {
     font-size: 0.5rem;
   }
+}
+
+.smarteq-progress--flex {
+  flex: 1;
+}
+
+.smarteq-ref-track-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.smarteq-error-text {
+  font-size: 0.5rem;
 }

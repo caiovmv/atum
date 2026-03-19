@@ -884,14 +884,22 @@ def probe_indexer(
         else:
             raise ValueError(f"probe_indexer: indexador desconhecido {name!r}")
 
-    import concurrent.futures
-    try:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-            future = ex.submit(_run)
-            future.result(timeout=timeout_sec)
-        return True
-    except Exception:
+    import threading
+
+    exc_holder: list[BaseException] = []
+
+    def _target():
+        try:
+            _run()
+        except Exception as e:
+            exc_holder.append(e)
+
+    t = threading.Thread(target=_target, daemon=True)
+    t.start()
+    t.join(timeout=timeout_sec)
+    if t.is_alive() or exc_holder:
         return False
+    return True
 
 
 def get_magnet_for_result(result: SearchResult) -> str | None:

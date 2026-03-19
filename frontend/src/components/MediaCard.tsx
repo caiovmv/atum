@@ -1,8 +1,9 @@
-import { type ReactNode, memo } from 'react';
+import { type ReactNode, memo, useState } from 'react';
+import { CircularProgress } from './CircularProgress';
 import { CoverImage } from './CoverImage';
 import './MediaCard.css';
 
-type ContentType = 'music' | 'movies' | 'tv';
+type ContentType = 'music' | 'movies' | 'tv' | 'concerts';
 
 export interface MediaCardCoverProps {
   contentType?: ContentType;
@@ -34,6 +35,12 @@ export interface MediaCardProps {
   primaryAction?: ReactNode;
   /** Proporção da capa: poster 2/3 (filmes/séries), square 1/1 (música). */
   coverShape?: MediaCardCoverShape;
+  /** Badge de formato exibido no canto superior direito da capa. */
+  badge?: ReactNode;
+  /** Elemento exibido no canto inferior direito da capa (ex.: ícone info). */
+  coverCorner?: ReactNode;
+  /** Placeholder exibido quando cover.src falha ao carregar. */
+  coverPlaceholder?: ReactNode;
   onClick?: () => void;
   /** Quando onClick está definido, usa este label no botão (acessibilidade). */
   clickAriaLabel?: string;
@@ -49,15 +56,23 @@ export const MediaCard = memo(function MediaCard({
   actions,
   primaryAction,
   coverShape = 'poster',
+  badge,
+  coverCorner,
+  coverPlaceholder,
   onClick,
   clickAriaLabel,
 }: MediaCardProps) {
-  const coverContent = cover.src ? (
+  const [coverError, setCoverError] = useState(false);
+  const usePlaceholder = cover.src && coverError;
+  const coverContent = usePlaceholder ? (
+    <div className="media-card-cover-placeholder">{coverPlaceholder ?? null}</div>
+  ) : cover.src ? (
     <img
       src={cover.src}
       alt={cover.alt ?? title.slice(0, 50)}
       className="media-card-cover-img"
       loading="lazy"
+      onError={() => setCoverError(true)}
     />
   ) : (
     <CoverImage
@@ -73,17 +88,33 @@ export const MediaCard = memo(function MediaCard({
   const coverArea = (
     <div className={`media-card-cover-wrap media-card-cover-wrap--${coverShape}`}>
       {coverContent}
+      {badge != null && (
+        <span className="media-card-badge" aria-hidden>
+          {badge}
+        </span>
+      )}
       {overlay && (
         <div className="media-card-overlay" aria-hidden>
-          <span className="media-card-overlay-label">{overlay.label}</span>
-          {overlay.percent != null && (
-            <span className="media-card-overlay-percent">{overlay.percent}%</span>
+          {overlay.percent != null ? (
+            <CircularProgress
+              percent={overlay.percent <= 1 ? overlay.percent * 100 : Math.min(100, overlay.percent)}
+              size={68}
+              strokeWidth={5}
+            />
+          ) : (
+            <span className="media-card-overlay-label">{overlay.label}</span>
           )}
+          <span className="media-card-overlay-status">{overlay.label}</span>
         </div>
       )}
       {primaryAction != null && (
         <div className="media-card-cover-hover-action" aria-hidden>
           {primaryAction}
+        </div>
+      )}
+      {coverCorner != null && (
+        <div className="media-card-cover-corner" aria-hidden>
+          {coverCorner}
         </div>
       )}
     </div>

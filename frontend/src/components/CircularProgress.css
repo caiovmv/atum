@@ -1,0 +1,37 @@
+.circular-progress {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.circular-progress svg {
+  transform: rotate(-90deg);
+}
+
+.circular-progress-track {
+  fill: none;
+  stroke: var(--atum-overlay-light-2);
+}
+
+.circular-progress-fill {
+  fill: none;
+  stroke: var(--atum-accent);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.4s ease;
+  filter: drop-shadow(0 0 4px var(--atum-accent-muted));
+}
+
+.circular-progress-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7em;
+  font-weight: 600;
+  color: var(--atum-white);
+  text-shadow: var(--shadow-sm);
+  pointer-events: none;
+}

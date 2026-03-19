@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { getDownloads } from '../api/downloads';
 
 export interface DownloadItem {
   id: number;
@@ -42,24 +43,45 @@ export function DownloadsEventsProvider({ children }: { children: React.ReactNod
   }, []);
 
   const refetch = useCallback(() => {
-    fetch('/api/downloads')
-      .then((r) => (r.ok ? r.json() : []))
+    getDownloads()
       .then((list) => {
         if (!mountedRef.current) return;
-        setDownloads(Array.isArray(list) ? list : []);
+        setDownloads(list);
         setLastUpdated(new Date());
       })
-      .catch(() => {});
+      .catch((err) => {
+        if (import.meta.env.DEV) console.warn('[DownloadsEvents] initial fetch failed', err);
+      });
   }, []);
 
   useEffect(() => {
     let disposed = false;
+    let sseErrorCount = 0;
+    let pollIntervalId: ReturnType<typeof setInterval> | null = null;
+    const POLL_INTERVAL_MS = 15000;
+    const SSE_ERROR_THRESHOLD = 2;
+
+    const startPolling = () => {
+      if (pollIntervalId) return;
+      pollIntervalId = setInterval(() => {
+        if (document.visibilityState === 'visible') refetch();
+      }, POLL_INTERVAL_MS);
+    };
+
+    const stopPolling = () => {
+      if (pollIntervalId) {
+        clearInterval(pollIntervalId);
+        pollIntervalId = null;
+      }
+    };
 
     const open = () => {
       if (disposed || sseRef.current) return;
       const es = new EventSource('/api/downloads/events');
-      es.onmessage = (event) => {
+      es.onmessage = (event: MessageEvent) => {
         setReconnecting(false);
+        sseErrorCount = 0;
+        stopPolling();
         try {
           const data = JSON.parse(event.data);
           setDownloads(Array.isArray(data) ? data : []);
@@ -72,6 +94,12 @@ export function DownloadsEventsProvider({ children }: { children: React.ReactNod
         setReconnecting(true);
         es.close();
         sseRef.current = null;
+        sseErrorCount += 1;
+        if (sseErrorCount >= SSE_ERROR_THRESHOLD && document.visibilityState === 'visible') {
+          startPolling();
+          refetch();
+          return;
+        }
         if (!disposed) {
           reconnectTimerRef.current = setTimeout(() => {
             reconnectTimerRef.current = null;
@@ -83,6 +111,7 @@ export function DownloadsEventsProvider({ children }: { children: React.ReactNod
     };
 
     const close = () => {
+      stopPolling();
       if (sseRef.current) {
         sseRef.current.close();
         sseRef.current = null;

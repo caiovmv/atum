@@ -1,0 +1,34 @@
+# Build APK via Bubblewrap: JDK 25 + Android SDK
+# Volumes persistem instalacoes entre execucoes
+
+FROM ubuntu:24.04
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    unzip \
+    git \
+    ca-certificates \
+    openjdk-17-jdk \
+    && rm -rf /var/lib/apt/lists/*
+
+# Node.js 20 para Bubblewrap
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get update \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Bubblewrap CLI
+RUN npm install -g @bubblewrap/cli
+
+# Diretorios para volumes (populados pelo entrypoint se vazios)
+ENV JAVA_HOME=/opt/jdk
+ENV ANDROID_HOME=/opt/android-sdk
+ENV PATH="${JAVA_HOME}/bin:${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools:${PATH}"
+
+COPY docker/entrypoint-android-build.sh /usr/local/bin/entrypoint-android-build.sh
+RUN sed -i 's/\r$//' /usr/local/bin/entrypoint-android-build.sh && chmod +x /usr/local/bin/entrypoint-android-build.sh
+
+WORKDIR /workspace
+
+ENTRYPOINT ["/usr/local/bin/entrypoint-android-build.sh"]
+CMD ["bubblewrap", "--help"]

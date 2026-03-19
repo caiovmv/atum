@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
-import time
 
-from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from ...db import (
     notification_list,
@@ -27,56 +27,34 @@ _KEEPALIVE_INTERVAL = 30.0
 
 
 async def _stream_notification_events():
-    """Generator SSE: detecta novas notificacoes e envia dados em tempo real; keepalive a cada 30s."""
+    """Generator SSE: escuta Redis Pub/Sub para notificações em tempo real."""
+    from ...event_bus import CHANNEL_NOTIFICATIONS, async_subscribe
+
+    count = await asyncio.to_thread(notification_unread_count)
+    yield f"data: {json.dumps({'count': count})}\n\n"
+
     try:
-        last_keepalive = time.monotonic()
-        last_seen_id = 0
-        initial = await asyncio.to_thread(notification_list, None, 1, False)
-        if initial:
-            last_seen_id = initial[0].get("id", 0)
-
-        while True:
-            try:
-                count = await asyncio.to_thread(notification_unread_count)
-                recent = await asyncio.to_thread(notification_list, None, 10, False)
-            except Exception as exc:
-                logger.warning("SSE notification_events error: %s", exc)
-                await asyncio.sleep(5)
-                continue
-            new_notifs = [n for n in recent if n.get("id", 0) > last_seen_id]
-
-            if new_notifs:
-                new_notifs.sort(key=lambda x: x.get("id", 0))
-                last_seen_id = new_notifs[-1].get("id", 0)
-                for n in new_notifs:
-                    ca = n.get("created_at")
-                    if ca and hasattr(ca, "isoformat"):
-                        n["created_at"] = ca.isoformat()
-                    payload = json.dumps({
-                        "count": count,
-                        "notification": {
-                            "id": n.get("id"),
-                            "type": n.get("type", ""),
-                            "title": n.get("title", ""),
-                            "body": n.get("body", ""),
-                        },
-                    })
+        async for channel, data in async_subscribe(CHANNEL_NOTIFICATIONS, keepalive_interval=_KEEPALIVE_INTERVAL):
+            if channel:
+                try:
+                    count = await asyncio.to_thread(notification_unread_count)
+                except Exception:
+                    count = 0
+                notif = data.get("notification")
+                if notif:
+                    payload = json.dumps({"count": count, "notification": notif})
                     yield f"event: new_notification\ndata: {payload}\n\n"
+                else:
+                    yield f"data: {json.dumps({'count': count})}\n\n"
             else:
-                payload = json.dumps({"count": count})
-                yield f"data: {payload}\n\n"
-
-            if time.monotonic() - last_keepalive >= _KEEPALIVE_INTERVAL:
                 yield ": keepalive\n\n"
-                last_keepalive = time.monotonic()
-            await asyncio.sleep(5)
     except (asyncio.CancelledError, GeneratorExit):
         pass
 
 
 @router.get("/events")
 async def notification_events():
-    """SSE: stream de contagem de notificações não lidas (atualização ~12 s)."""
+    """SSE: stream de notificações via Redis Pub/Sub."""
     return StreamingResponse(
         _stream_notification_events(),
         media_type="text/event-stream",
@@ -90,12 +68,18 @@ async def notification_events():
 
 @router.get("")
 def list_notifications(
+    request: Request,
     since_id: int | None = Query(None, description="Retornar apenas id < since_id (paginação)"),
     limit: int = Query(50, ge=1, le=100),
     unread_only: bool = Query(False),
-) -> list[dict]:
-    """Lista notificações (mais recentes primeiro)."""
-    return notification_list(since_id=since_id, limit=limit, unread_only=unread_only)
+):
+    """Lista notificações (mais recentes primeiro). ETag para revalidação."""
+    data = notification_list(since_id=since_id, limit=limit, unread_only=unread_only)
+    body = json.dumps(data, default=str, ensure_ascii=False)
+    etag = hashlib.md5(body.encode()).hexdigest()
+    if request.headers.get("if-none-match") == f'"{etag}"':
+        return Response(status_code=304)
+    return Response(content=body, media_type="application/json", headers={"ETag": f'"{etag}"', "Cache-Control": "private, max-age=0, must-revalidate"})
 
 
 @router.get("/unread-count")
@@ -110,6 +94,8 @@ def mark_read(notification_id: int) -> dict:
     ok = notification_mark_read(notification_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Notificação não encontrada.")
+    from ...event_bus import CHANNEL_NOTIFICATIONS, publish
+    publish(CHANNEL_NOTIFICATIONS, {"type": "read", "id": notification_id})
     return {"ok": True}
 
 
@@ -117,6 +103,8 @@ def mark_read(notification_id: int) -> dict:
 def mark_all_read() -> dict:
     """Marca todas como lidas."""
     count = notification_mark_all_read()
+    from ...event_bus import CHANNEL_NOTIFICATIONS, publish
+    publish(CHANNEL_NOTIFICATIONS, {"type": "mark_all_read", "updated": count})
     return {"updated": count}
 
 
@@ -124,4 +112,6 @@ def mark_all_read() -> dict:
 def clear_all() -> dict:
     """Remove todas as notificações."""
     count = notification_clear_all()
+    from ...event_bus import CHANNEL_NOTIFICATIONS, publish
+    publish(CHANNEL_NOTIFICATIONS, {"type": "cleared", "deleted": count})
     return {"deleted": count}

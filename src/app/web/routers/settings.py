@@ -3,16 +3,36 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 import shutil
 from pathlib import Path
 from typing import Any
 
+from urllib.parse import urlparse
+
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/settings", tags=["settings"])
+
+_ALLOWED_SCHEMES = {"http", "https"}
+
+
+def _validate_url(raw: str) -> str | None:
+    """Return error message if URL has unsafe scheme or no host, else None."""
+    try:
+        parsed = urlparse(raw)
+    except ValueError:
+        return "URL inválida."
+    if parsed.scheme not in _ALLOWED_SCHEMES:
+        return f"Scheme '{parsed.scheme}' não permitido. Use http ou https."
+    if not parsed.hostname:
+        return "URL sem host."
+    return None
 
 _logger = logging.getLogger(__name__)
 
@@ -40,18 +60,28 @@ def _get_env_defaults() -> dict[str, Any]:
 
 
 @router.get("")
-def get_settings_all() -> dict[str, Any]:
-    """Retorna todas as configurações (merge: defaults do .env + overrides do DB). Segredos mascarados."""
-    repo = _get_repo()
-    result = repo.get_all(mask_sensitive=True)
-    env_defaults = _get_env_defaults()
-    for k, v in env_defaults.items():
-        if not result.get(k):
-            if k in {"tmdb_api_key", "lastfm_api_key", "spotify_client_secret"} and v and len(v) > 4:
-                result[k] = v[:2] + "*" * (len(v) - 4) + v[-2:]
-            else:
-                result[k] = v
-    return result
+def get_settings_all(request: Request):
+    """Retorna todas as configurações (merge: defaults do .env + overrides do DB). Cache Redis 5 min, ETag."""
+    from ...event_bus import CACHE_SETTINGS_PREFIX, cache_get, cache_set
+    cached = cache_get(f"{CACHE_SETTINGS_PREFIX}:all")
+    if cached is not None:
+        result = cached
+    else:
+        repo = _get_repo()
+        result = repo.get_all(mask_sensitive=True)
+        env_defaults = _get_env_defaults()
+        for k, v in env_defaults.items():
+            if not result.get(k):
+                if k in {"tmdb_api_key", "lastfm_api_key", "spotify_client_secret"} and v and len(v) > 4:
+                    result[k] = v[:2] + "*" * (len(v) - 4) + v[-2:]
+                else:
+                    result[k] = v
+        cache_set(f"{CACHE_SETTINGS_PREFIX}:all", result, ttl_seconds=300)
+    body = json.dumps(result, default=str, ensure_ascii=False)
+    etag = hashlib.md5(body.encode()).hexdigest()
+    if request.headers.get("if-none-match") == f'"{etag}"':
+        return Response(status_code=304)
+    return Response(content=body, media_type="application/json", headers={"ETag": f'"{etag}"', "Cache-Control": "private, max-age=0, must-revalidate"})
 
 
 class SettingsUpdateBody(BaseModel):
@@ -61,11 +91,14 @@ class SettingsUpdateBody(BaseModel):
 
 @router.patch("")
 def update_settings(body: SettingsUpdateBody) -> dict[str, Any]:
-    """Salva overrides de configuração no DB. Retorna o estado completo atualizado."""
+    """Salva overrides de configuração no DB. Invalida cache Redis e notifica via Pub/Sub."""
     repo = _get_repo()
     if not body.settings:
         raise HTTPException(status_code=400, detail="Nenhuma configuração enviada.")
     repo.set_many(body.settings)
+    from ...event_bus import CACHE_SETTINGS_PREFIX, CHANNEL_SETTINGS, cache_delete, publish
+    cache_delete(f"{CACHE_SETTINGS_PREFIX}:all")
+    publish(CHANNEL_SETTINGS, {"type": "settings_updated", "keys": list(body.settings.keys())})
     return repo.get_all(mask_sensitive=True)
 
 
@@ -88,6 +121,8 @@ async def test_connection(body: TestConnectionBody) -> dict[str, Any]:
             token = (body.token or "").strip()
             if not url or not token:
                 return {"ok": False, "error": "URL e Token são obrigatórios."}
+            if err := _validate_url(url):
+                return {"ok": False, "error": err}
             try:
                 r = await client.get(
                     f"{url}/identity",
@@ -107,6 +142,8 @@ async def test_connection(body: TestConnectionBody) -> dict[str, Any]:
             api_key = (body.api_key or body.token or "").strip()
             if not url or not api_key:
                 return {"ok": False, "error": "URL e API Key são obrigatórios."}
+            if err := _validate_url(url):
+                return {"ok": False, "error": err}
             try:
                 r = await client.get(
                     f"{url}/System/Info",
@@ -139,6 +176,8 @@ async def test_connection(body: TestConnectionBody) -> dict[str, Any]:
             url = (body.url or "").strip().rstrip("/")
             if not url:
                 return {"ok": False, "error": "URL é obrigatória (ex: http://ollama:11434)."}
+            if err := _validate_url(url):
+                return {"ok": False, "error": err}
             try:
                 r = await client.get(f"{url}/api/tags")
                 if r.status_code == 200:
@@ -245,7 +284,10 @@ _REORGANIZE_MAX_WORKERS = 4
 
 
 def _reorganize_library_sync(content_type: str | None, dry_run: bool) -> dict:
-    """Lógica síncrona da reorganização (roda em thread separada).
+    """REORGANIZE: aplica naming Plex, move/hardlink/copia arquivos, enriquece via TMDB.
+
+    Diferente do Library Rescan (sync daemon) que apenas DESCOBRE pastas existentes,
+    o Reorganize MOVE e RENOMEIA arquivos para a estrutura Plex-compatible.
 
     post_process_download() é paralelizado via ThreadPoolExecutor para
     aproveitar I/O concorrente (TMDB HTTP + filesystem).
@@ -407,6 +449,14 @@ def _reorganize_library_sync(content_type: str | None, dry_run: bool) -> dict:
     except Exception as exc:
         _logger.debug("Falha ao criar notificação de reorganização: %s", exc)
 
+    if processed > 0:
+        try:
+            from ...event_bus import CACHE_FACETS_PREFIX, CHANNEL_LIBRARY, cache_delete_pattern, publish
+            publish(CHANNEL_LIBRARY, {"type": "library_reorganized", "facets_dirty": True})
+            cache_delete_pattern(f"{CACHE_FACETS_PREFIX}:*")
+        except Exception:
+            pass
+
     return {
         "processed": processed,
         "skipped": skipped,
@@ -422,8 +472,74 @@ async def reorganize_library(
     content_type: str | None = None,
     dry_run: bool = False,
 ) -> dict:
-    """Reorganiza a biblioteca existente seguindo o padrão Plex-compatible."""
+    """REORGANIZE: renomeia e move arquivos para estrutura Plex-compatible.
+
+    Diferente do Library Rescan (sync daemon) que apenas descobre e cataloga
+    pastas existentes sem mover nada, o Reorganize aplica:
+    - Naming Plex (Artist/Album, Movie (Year), Show/Season)
+    - Enriquecimento TMDB (filmes/séries)
+    - Move/hardlink/copy conforme organize_mode
+    - Cópia de subtitles junto com vídeos
+    - Detecção de edições (Director's Cut, Extended, etc.)
+    """
     return await asyncio.to_thread(_reorganize_library_sync, content_type, dry_run)
+
+
+_CA_CERT_PATH = Path("/etc/nginx/ssl/ca.crt")
+
+_CERT_README = """\
+=== Certificado Raiz — Atum Media Center ===
+
+Instale este certificado para acessar o Atum via HTTPS sem avisos de segurança.
+
+── Windows ──────────────────────────────────────
+  Abra o Prompt de Comando como Administrador e execute:
+    certutil -addstore "Root" atum-ca.crt
+  Ou: clique duas vezes no arquivo > Instalar Certificado >
+      Máquina Local > Colocar em "Autoridades de Certificação Raiz Confiáveis".
+
+── macOS ────────────────────────────────────────
+  No Terminal:
+    sudo security add-trusted-cert -d -r trustRoot \\
+      -k /Library/Keychains/System.keychain atum-ca.crt
+
+── Linux ────────────────────────────────────────
+    sudo cp atum-ca.crt /usr/local/share/ca-certificates/
+    sudo update-ca-certificates
+
+── iOS ──────────────────────────────────────────
+  1. Abra o arquivo .crt no Safari (transferir via AirDrop ou link direto).
+  2. Ajustes > Geral > VPN e Gerenciamento de Dispositivo > perfil "Atum Root CA" > Instalar.
+  3. Ajustes > Geral > Sobre > Certificados Confiáveis > ativar "Atum Root CA".
+
+── Android ──────────────────────────────────────
+  1. Configurações > Segurança > Criptografia e Credenciais > Instalar certificado > CA.
+  2. Selecione o arquivo atum-ca.crt.
+"""
+
+
+@router.get("/certificates")
+async def download_certificates():
+    """Retorna ZIP com o certificado CA e instruções de instalação por plataforma."""
+    import io
+    import zipfile
+
+    if not _CA_CERT_PATH.is_file():
+        raise HTTPException(status_code=404, detail="Certificado não disponível. O servidor pode não estar usando HTTPS.")
+
+    ca_bytes = await asyncio.to_thread(_CA_CERT_PATH.read_bytes)
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("atum-ca.crt", ca_bytes)
+        zf.writestr("LEIA-ME.txt", _CERT_README)
+    buf.seek(0)
+
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="atum-certificados.zip"'},
+    )
 
 
 @router.get("/plex-sections")

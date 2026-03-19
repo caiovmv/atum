@@ -240,7 +240,7 @@ def download_add_cmd(
     from .runner_client import runner_add
 
     s = get_settings()
-    path = (download_dir or getattr(s, "download_dir", "") or s.watch_folder or "./downloads").strip()
+    path = (download_dir or "").strip() or s.save_path_for_content_type(None)
     did = runner_add(magnet.strip(), path, name=name, start_now=start_now)
     if did is not None:
         typer.echo(f"Adicionado à fila com id {did} (Runner). Pasta: {path}")
@@ -954,12 +954,17 @@ def sync_daemon_cmd(
         while True:
             try:
                 typer.echo("[sync] Ciclo iniciado.")
+                from concurrent.futures import ThreadPoolExecutor
+
                 from .download_manager import reconcile_downloads_with_filesystem
                 from .sync_library_imports import run_library_import_scan
 
-                n_removed = reconcile_downloads_with_filesystem()
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    f_reconcile = pool.submit(reconcile_downloads_with_filesystem)
+                    f_import = pool.submit(run_library_import_scan)
+                    n_removed = f_reconcile.result()
+                    added, imp_removed = f_import.result()
                 typer.echo(f"  Reconcile downloads: {n_removed} removido(s) (content_path não encontrado).")
-                added, imp_removed = run_library_import_scan()
                 typer.echo(f"  Import biblioteca: {added} adicionado(s), {imp_removed} removido(s).")
                 typer.echo("[sync] Ciclo concluído.")
             except KeyboardInterrupt:
@@ -1144,7 +1149,7 @@ def library_reorganize(
     dry_run: bool = typer.Option(False, "--dry-run", help="Mostrar o que seria feito sem mover nada."),
     content_type: str | None = typer.Option(None, "--content-type", "-t", help="Filtrar por tipo: music, movies, tv."),
 ) -> None:
-    """Reorganiza a biblioteca existente seguindo o padrão Plex-compatible. Não deleta arquivos originais."""
+    """REORGANIZE: renomeia/move arquivos para estrutura Plex. Diferente do sync (rescan) que só descobre pastas."""
     from .deps import get_library_import_repo, get_repo, get_settings
     from .post_process import post_process_download
 

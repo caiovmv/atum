@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from pathlib import Path
 from typing import Callable
 
-# Trackers públicos (mesma lista de torrent_metadata) para melhor descoberta
+logger = logging.getLogger(__name__)
+
 PUBLIC_TRACKERS = [
     "udp://tracker.opentrackr.org:1337/announce",
     "udp://open.stealth.si:80/announce",
@@ -15,7 +17,6 @@ PUBLIC_TRACKERS = [
     "udp://exodus.desync.com:6969/announce",
 ]
 
-# Bootstrap DHT
 DHT_ROUTERS = [
     ("router.bittorrent.com", 6881),
     ("router.utorrent.com", 6881),
@@ -26,7 +27,6 @@ DHT_ROUTERS = [
 def _create_session(port: int):
     """Cria sessão libtorrent com DHT, LSD e listen na porta."""
     import libtorrent as lt
-    # listen_interfaces: 0.0.0.0 para aceitar conexões de entrada (Docker/rede)
     settings = {"listen_interfaces": f"0.0.0.0:{port}"}
     try:
         ses = lt.session(settings)
@@ -43,6 +43,7 @@ def _create_session(port: int):
         ses.start_lsd()
     except Exception:
         pass
+    logger.debug("Sessão libtorrent criada na porta %d", port)
     return ses
 
 
@@ -54,14 +55,16 @@ def _add_torrent_to_session(ses, magnet_or_path: str, save_path: str):
         atp = lt.parse_magnet_uri(magnet_or_path.strip())
         atp.save_path = save_path
         try:
-            atp.storage_mode = lt.storage_mode_t(2)  # sparse
+            atp.storage_mode = lt.storage_mode_t(2)
         except (TypeError, AttributeError):
             pass
         existing = getattr(atp, "trackers", None) or []
         atp.trackers = list(existing) + PUBLIC_TRACKERS
         handle = ses.add_torrent(atp)
+        logger.info("Torrent adicionado via magnet (aguardando metadados via DHT/trackers)")
         return handle, True
     # Arquivo .torrent
+    logger.info("Torrent adicionado via arquivo .torrent: %s", magnet_or_path[:80])
     ti = lt.torrent_info(magnet_or_path.strip())
     try:
         atp = lt.add_torrent_params()
@@ -99,25 +102,32 @@ def run_download(
     ses = _create_session(port)
     try:
         handle, is_magnet = _add_torrent_to_session(ses, magnet_or_path, save_path)
-        # Esperar metadados se for magnet
         if is_magnet:
-            deadline = time.monotonic() + 300
+            metadata_timeout = 300
+            deadline = time.monotonic() + metadata_timeout
+            logger.info("Aguardando metadados via DHT (timeout=%ds)...", metadata_timeout)
             while not handle.has_metadata():
                 if stop_event is not None and getattr(stop_event, "is_set", lambda: False)():
+                    logger.info("Metadata wait cancelado pelo usuário")
                     try:
                         ses.remove_torrent(handle)
                     except Exception:
                         pass
                     return False, None
+                elapsed = time.monotonic() - (deadline - metadata_timeout)
                 if time.monotonic() > deadline:
+                    logger.warning(
+                        "Timeout ao obter metadados via DHT após %.0fs",
+                        elapsed,
+                    )
                     try:
                         ses.remove_torrent(handle)
                     except Exception:
                         pass
                     return False, None
                 time.sleep(0.5)
+            logger.info("Metadados obtidos com sucesso via DHT")
 
-        # Aplicar prioridade 0 aos arquivos excluídos
         if excluded_file_indices:
             for idx in excluded_file_indices:
                 try:
@@ -128,6 +138,7 @@ def run_download(
         interval = max(0.25, progress_interval_seconds)
         while True:
             if stop_event is not None and getattr(stop_event, "is_set", lambda: False)():
+                logger.info("Download cancelado pelo usuário")
                 try:
                     ses.remove_torrent(handle)
                 except Exception:
@@ -138,13 +149,17 @@ def run_download(
                 progress_callback(st)
             if st.is_seeding:
                 break
-            # Erro fatal
-            if getattr(st, "errc", None) and str(getattr(st, "errc", "")):
-                try:
-                    ses.remove_torrent(handle)
-                except Exception:
-                    pass
-                return False, None
+            errc = getattr(st, "errc", None)
+            if errc is not None:
+                err_val = getattr(errc, "value", lambda: 0)()
+                if err_val != 0:
+                    err_msg = getattr(errc, "message", lambda: str(errc))()
+                    logger.error("Erro fatal do libtorrent (code=%d): %s", err_val, err_msg)
+                    try:
+                        ses.remove_torrent(handle)
+                    except Exception:
+                        pass
+                    return False, None
             time.sleep(interval)
 
         name = None
@@ -159,6 +174,7 @@ def run_download(
             ses.remove_torrent(handle)
         except Exception:
             pass
+        logger.info("Download concluído: %s", name or "(sem nome)")
         return True, (name or "").strip() or None
     finally:
         try:

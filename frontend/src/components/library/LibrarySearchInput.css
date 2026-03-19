@@ -1,0 +1,89 @@
+.atum-library-search-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.atum-library-search-input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.95rem;
+  font-family: inherit;
+  color: var(--atum-text);
+  background: var(--atum-input-bg, var(--atum-bg));
+  border: 1px solid var(--atum-border);
+  border-radius: var(--radius-md, 8px);
+  transition: border-color 0.15s;
+}
+
+.atum-library-search-input::placeholder {
+  color: var(--atum-muted);
+}
+
+.atum-library-search-input:focus {
+  outline: none;
+  border-color: var(--atum-accent);
+}
+
+.atum-library-search-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin: 0;
+  margin-top: 2px;
+  padding: 4px 0;
+  list-style: none;
+  background: var(--atum-card);
+  border: 1px solid var(--atum-border);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 8px 24px var(--atum-overlay-strong);
+  max-height: 280px;
+  overflow-y: auto;
+  z-index: 100;
+}
+
+.atum-library-search-suggestion {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background: transparent;
+  border: none;
+  color: var(--atum-text);
+  font-size: 0.9rem;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.08s;
+}
+
+.atum-library-search-suggestion:hover,
+.atum-library-search-suggestion.active {
+  background: var(--atum-accent-08, rgba(var(--atum-accent-rgb, 59, 130, 246), 0.08));
+}
+
+.atum-library-search-suggestion.active {
+  color: var(--atum-accent);
+}
+
+.atum-library-search-suggestion-type {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--atum-muted);
+  min-width: 4rem;
+}
+
+.atum-library-search-suggestion.active .atum-library-search-suggestion-type {
+  color: var(--atum-accent);
+  opacity: 0.9;
+}
+
+.atum-library-search-suggestion-value {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

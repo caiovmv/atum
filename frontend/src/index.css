@@ -1,22 +1,24 @@
-/* Atum: tema escuro, sidebar tipo Spotify, área principal tipo Netflix */
+/* Atum: tema escuro, media center hi-fi */
 :root {
   font-family: "Inter", system-ui, -apple-system, sans-serif;
   line-height: 1.5;
   font-weight: 400;
-  color: #e5e5e5;
-  background-color: #0a0a0a;
+  color: var(--atum-text);
+  background-color: var(--atum-bg);
   color-scheme: dark;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 
+  /* ── Colors ── */
   --atum-bg: #0a0a0a;
   --atum-sidebar: #121212;
   --atum-card: #181818;
   --atum-card-hover: #282828;
-  --atum-accent: #1db954;
-  --atum-accent-hover: #1ed760;
+  --atum-accent: #00e5c8;
+  --atum-accent-rgb: 0, 229, 200;
+  --atum-accent-hover: #00f5d4;
   --atum-text: #e5e5e5;
   --atum-text-muted: #a0a0a0;
   --atum-border: #2a2a2a;
@@ -24,6 +26,197 @@
   --atum-muted: #888888;
   --atum-fg: #eeeeee;
   --atum-error: #e74c3c;
+  --atum-success: #4caf50;
+  --atum-warning: #ffa726;
+  --atum-surface: #141414;
+  --atum-elevated: #1e1e1e;
+  --atum-overlay: rgba(0, 0, 0, 0.6);
+  --atum-overlay-dim: rgba(0, 0, 0, 0.5);
+  --atum-overlay-darker: rgba(0, 0, 0, 0.55);
+  --atum-overlay-strong: rgba(0, 0, 0, 0.8);
+  --atum-overlay-mid: rgba(0, 0, 0, 0.4);
+  --atum-overlay-badge: rgba(0, 0, 0, 0.7);
+  --atum-overlay-light: rgba(255, 255, 255, 0.05);
+  --atum-overlay-light-2: rgba(255, 255, 255, 0.1);
+  --atum-overlay-light-04: rgba(255, 255, 255, 0.04);
+  --atum-overlay-light-15: rgba(255, 255, 255, 0.15);
+  --atum-text-on-accent: #000;
+  --atum-white: #ffffff;
+  --atum-text-on-dark: rgba(255, 255, 255, 0.7);
+  --atum-success-bg: rgba(76, 175, 80, 0.15);
+  --atum-success-bg-dim: rgba(76, 175, 80, 0.1);
+  --atum-error-bg: rgba(244, 67, 54, 0.15);
+  --atum-error-bg-dim: rgba(244, 67, 54, 0.1);
+  --atum-warning-bg: rgba(255, 193, 7, 0.08);
+  --atum-warning-border: rgba(255, 193, 7, 0.25);
+  --atum-accent-glow: rgba(0, 229, 200, 0.3);
+  --atum-accent-dim: rgba(0, 229, 200, 0.15);
+  --atum-accent-scale: rgba(0, 229, 200, 0.5);
+  --atum-accent-text: rgba(0, 229, 200, 0.6);
+  --atum-accent-muted: rgba(0, 229, 200, 0.4);
+  /* Opacidades adicionais para glow, bordas, backgrounds */
+  --atum-accent-04: rgba(0, 229, 200, 0.04);
+  --atum-accent-06: rgba(0, 229, 200, 0.06);
+  --atum-accent-08: rgba(0, 229, 200, 0.08);
+  --atum-accent-10: rgba(0, 229, 200, 0.1);
+  --atum-accent-12: rgba(0, 229, 200, 0.12);
+  --atum-accent-20: rgba(0, 229, 200, 0.2);
+  --atum-accent-25: rgba(0, 229, 200, 0.25);
+  --atum-accent-35: rgba(0, 229, 200, 0.35);
+  --atum-accent-45: rgba(0, 229, 200, 0.45);
+  --atum-accent-70: rgba(0, 229, 200, 0.7);
+  --atum-accent-80: rgba(0, 229, 200, 0.8);
+  --atum-accent-03: rgba(0, 229, 200, 0.03);
+  --atum-accent-05: rgba(0, 229, 200, 0.05);
+  --atum-accent-90: rgba(0, 229, 200, 0.9);
+  --atum-vfd-bg: #1a1a1a;
+  --atum-vfd-bg-dim: #141414;
+  --atum-vfd-bg-mid: #131313;
+  --atum-vfd-bg-darker: #101010;
+  --atum-vfd-bg-dark: #0c0c0c;
+  --atum-vfd-bg-black: #111111;
+  --atum-vfd-bg-light: #222222;
+  --atum-vfd-bg-1c: #1c1c1c;
+  --atum-vfd-bg-1d: #1d1d1d;
+  --atum-vfd-bg-1e: #1e1e1e;
+  --atum-vfd-bg-1f: #1f1f1f;
+  --atum-vfd-bg-15: #151515;
+  /* Receiver VFD overlays (white/black) — substituir rgba hardcoded em receiver.css */
+  --atum-vfd-ow-008: rgba(255, 255, 255, 0.008);
+  --atum-vfd-ow-01: rgba(255, 255, 255, 0.01);
+  --atum-vfd-ow-012: rgba(255, 255, 255, 0.012);
+  --atum-vfd-ow-014: rgba(255, 255, 255, 0.014);
+  --atum-vfd-ow-015: rgba(255, 255, 255, 0.015);
+  --atum-vfd-ow-016: rgba(255, 255, 255, 0.016);
+  --atum-vfd-ow-018: rgba(255, 255, 255, 0.018);
+  --atum-vfd-ow-02: rgba(255, 255, 255, 0.02);
+  --atum-vfd-ow-025: rgba(255, 255, 255, 0.025);
+  --atum-vfd-ow-03: rgba(255, 255, 255, 0.03);
+  --atum-vfd-ow-035: rgba(255, 255, 255, 0.035);
+  --atum-vfd-ow-04: rgba(255, 255, 255, 0.04);
+  --atum-vfd-ow-05: rgba(255, 255, 255, 0.05);
+  --atum-vfd-ow-06: rgba(255, 255, 255, 0.06);
+  --atum-vfd-ow-065: rgba(255, 255, 255, 0.065);
+  --atum-vfd-ow-07: rgba(255, 255, 255, 0.07);
+  --atum-vfd-ow-08: rgba(255, 255, 255, 0.08);
+  --atum-vfd-ow-10: rgba(255, 255, 255, 0.10);
+  --atum-vfd-ow-12: rgba(255, 255, 255, 0.12);
+  --atum-vfd-ow-14: rgba(255, 255, 255, 0.14);
+  --atum-vfd-ow-15: rgba(255, 255, 255, 0.15);
+  --atum-vfd-ow-18: rgba(255, 255, 255, 0.18);
+  --atum-vfd-ow-2: rgba(255, 255, 255, 0.2);
+  --atum-vfd-ow-3: rgba(255, 255, 255, 0.3);
+  --atum-vfd-ow-35: rgba(255, 255, 255, 0.35);
+  --atum-vfd-ow-38: rgba(255, 255, 255, 0.38);
+  --atum-vfd-ow-4: rgba(255, 255, 255, 0.4);
+  --atum-vfd-ow-45: rgba(255, 255, 255, 0.45);
+  --atum-vfd-ow-5: rgba(255, 255, 255, 0.5);
+  --atum-vfd-ob-15: rgba(0, 0, 0, 0.15);
+  --atum-vfd-ob-3: rgba(0, 0, 0, 0.3);
+  --atum-vfd-ob-35: rgba(0, 0, 0, 0.35);
+  --atum-vfd-ob-5: rgba(0, 0, 0, 0.5);
+  --atum-vfd-ob-7: rgba(0, 0, 0, 0.7);
+  --atum-vfd-ob-85: rgba(8, 8, 8, 0.85);
+  --atum-vfd-ow-004: rgba(255, 255, 255, 0.004);
+  --atum-vfd-ow-006: rgba(255, 255, 255, 0.006);
+  --atum-vfd-ow-022: rgba(255, 255, 255, 0.022);
+  --atum-vfd-ow-038: rgba(255, 255, 255, 0.038);
+  --atum-vfd-ow-045: rgba(255, 255, 255, 0.045);
+  --atum-vfd-ow-055: rgba(255, 255, 255, 0.055);
+  --atum-vfd-ob-1: rgba(0, 0, 0, 0.1);
+  --atum-vfd-ob-4: rgba(0, 0, 0, 0.4);
+  --atum-vfd-ob-55: rgba(0, 0, 0, 0.55);
+  --atum-vfd-ob-6: rgba(0, 0, 0, 0.6);
+  --atum-vfd-ow-25: rgba(255, 255, 255, 0.25);
+  --atum-vfd-ow-6: rgba(255, 255, 255, 0.6);
+  --atum-vfd-modal-bg: rgba(10, 10, 10, 0.96);
+  --atum-bg-darkest: #080808;
+  --atum-tab-bar-start: #161616;
+  --atum-tab-bar-end: #0e0e0e;
+  --atum-msg-system: rgba(100, 100, 100, 0.15);
+  --atum-msg-user: rgba(0, 100, 200, 0.1);
+  --atum-msg-assistant: rgba(0, 150, 100, 0.1);
+  --atum-shadow-card: rgba(0, 0, 0, 0.4);
+  --atum-bg-input: #1a1a1a;
+  --atum-hover: #333333;
+  /* @deprecated Use --atum-accent for primary actions */
+  --atum-primary: #3498db;
+
+  /* ── Spacing scale (4px base) ── */
+  --space-1: 0.25rem;   /* 4px */
+  --space-2: 0.5rem;    /* 8px */
+  --space-3: 0.75rem;   /* 12px */
+  --space-4: 1rem;      /* 16px */
+  --space-5: 1.25rem;   /* 20px */
+  --space-6: 1.5rem;    /* 24px */
+  --space-7: 2rem;      /* 32px */
+  --space-8: 2.5rem;    /* 40px */
+  --space-9: 3rem;      /* 48px */
+  --space-10: 4rem;     /* 64px */
+
+  /* ── Typography scale ── */
+  --text-xs: 0.75rem;     /* 12px */
+  --text-sm: 0.85rem;     /* ~13.6px */
+  --text-md: 0.95rem;     /* ~15.2px */
+  --text-base: 1rem;      /* 16px */
+  --text-lg: 1.125rem;    /* 18px */
+  --text-xl: 1.25rem;     /* 20px */
+  --text-2xl: 1.5rem;     /* 24px */
+  --text-3xl: 2rem;       /* 32px */
+  --text-display: 2.5rem; /* 40px */
+
+  /* ── Font weights ── */
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* ── Border radius ── */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-full: 999px;
+
+  /* ── Shadows ── */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.6);
+  --shadow-xl: 0 16px 50px rgba(0, 0, 0, 0.7);
+
+  /* ── Z-index scale ── */
+  --z-base: 0;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-overlay: 300;
+  --z-modal: 400;
+  --z-bottom-sheet: 450;
+  --z-toast: 500;
+  --z-tooltip: 600;
+
+  /* ── Transitions ── */
+  --transition-fast: 0.12s ease;
+  --transition-normal: 0.2s ease;
+  --transition-slow: 0.3s ease;
+  --transition-spring: 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* ── Breakpoints (for reference in JS; CSS uses media queries) ── */
+  --bp-phone-max: 599px;
+  --bp-tablet-min: 600px;
+  --bp-tablet-max: 1023px;
+  --bp-desktop-min: 1024px;
+  --bp-wide-min: 1440px;
+
+  /* ── Touch targets ── */
+  --touch-target-min: 44px;
+  --touch-target-comfortable: 48px;
+
+  /* ── Safe areas ── */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
 }
 
 * {
@@ -55,7 +248,7 @@ button {
   border-radius: 6px;
   border: none;
   padding: 0.5em 1em;
-  min-height: 44px;
+  min-height: var(--touch-target-min);
   font-size: 0.95em;
   font-weight: 500;
   font-family: inherit;
@@ -70,10 +263,111 @@ button:hover {
 }
 button.primary {
   background: var(--atum-accent);
-  color: #000;
+  color: var(--atum-bg);
 }
 button.primary:hover {
   background: var(--atum-accent-hover);
+}
+
+/* ─── Atum Button System (centralizado) ─── */
+.atum-btn {
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--atum-border);
+  background: var(--atum-card);
+  color: var(--atum-text);
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.2s, border-color 0.2s;
+  min-height: var(--touch-target-min);
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+.atum-btn:hover {
+  background: var(--atum-hover);
+}
+.atum-btn-primary {
+  background: var(--atum-accent);
+  border-color: var(--atum-accent);
+  color: var(--atum-text-on-accent);
+}
+.atum-btn-primary:hover {
+  background: var(--atum-accent-hover);
+  border-color: var(--atum-accent-hover);
+}
+.atum-btn-small {
+  font-size: 0.8rem;
+  padding: 0.35rem 0.5rem;
+}
+.atum-btn--danger {
+  color: var(--atum-error);
+  border-color: var(--atum-error-bg);
+}
+.atum-btn--danger:hover {
+  background: var(--atum-error-bg-dim);
+}
+.atum-btn-icon {
+  padding: 0.5rem;
+  min-width: var(--touch-target-min);
+  min-height: var(--touch-target-min);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.atum-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.atum-btn:focus-visible {
+  outline: 2px solid var(--atum-accent);
+  outline-offset: 2px;
+}
+
+/* ─── Atum Input System (centralizado) ─── */
+.atum-input,
+.atum-select {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--atum-border);
+  border-radius: var(--radius-md);
+  background: var(--atum-bg-input, var(--atum-card));
+  color: var(--atum-text);
+  font-size: 0.9rem;
+  font-family: inherit;
+  min-height: var(--touch-target-min);
+  width: 100%;
+}
+.atum-input:focus,
+.atum-select:focus {
+  outline: 2px solid var(--atum-accent);
+  outline-offset: 1px;
+}
+.atum-input--small {
+  padding: 0.35rem 0.6rem;
+  font-size: 0.85rem;
+  min-height: auto;
+}
+.atum-input-textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+.atum-input--ghost {
+  background: transparent;
+  border: none;
+  padding: 0;
+  min-height: auto;
+  box-shadow: none;
+}
+.atum-input--ghost:focus {
+  outline: none;
+  box-shadow: none;
+}
+.atum-select {
+  cursor: pointer;
+}
+.atum-select--pill {
+  border-radius: 999px;
+  min-width: 5rem;
 }
 
 input, select {
@@ -83,8 +377,107 @@ input, select {
   color: var(--atum-text);
   padding: 0.5em 0.75em;
   font-size: 1em;
-  min-height: 44px;
+  min-height: var(--touch-target-min);
 }
 input::placeholder {
   color: var(--atum-text-muted);
+}
+
+/* ─── App Loading Fallback ─── */
+.app-loading-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  background: var(--atum-bg);
+}
+.app-loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--atum-border);
+  border-top-color: var(--atum-accent);
+  border-radius: 50%;
+  animation: app-spin 0.8s linear infinite;
+}
+@keyframes app-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ─── Reduced Motion ─── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ─── Error Boundary ─── */
+.error-boundary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  padding: 1.5rem;
+  background: var(--atum-bg);
+}
+.error-boundary-card {
+  text-align: center;
+  max-width: 420px;
+  padding: 2.5rem 2rem;
+  background: var(--atum-card);
+  border: 1px solid var(--atum-border);
+  border-radius: var(--radius-lg, 12px);
+}
+.error-boundary-icon {
+  font-size: 2.5rem;
+  margin-bottom: 0.75rem;
+}
+.error-boundary-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+  color: var(--atum-text);
+}
+.error-boundary-message {
+  font-size: 0.85rem;
+  color: var(--atum-text-muted);
+  margin: 0 0 1.5rem;
+  word-break: break-word;
+}
+.error-boundary-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.error-boundary-btn {
+  padding: 0.5rem 1.25rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border: 1px solid var(--atum-border);
+  cursor: pointer;
+}
+.error-boundary-btn--primary {
+  background: var(--atum-accent);
+  color: var(--atum-bg);
+  border-color: var(--atum-accent);
+}
+.error-boundary-btn--primary:hover {
+  background: var(--atum-accent-hover);
+}
+
+/* --- Utilitário global --- */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

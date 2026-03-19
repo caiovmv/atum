@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: feed-daemon
+  namespace: atum
+  labels:
+    app.kubernetes.io/name: feed-daemon
+    app.kubernetes.io/component: daemon
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: feed-daemon
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: feed-daemon
+        app.kubernetes.io/component: daemon
+    spec:
+      containers:
+        - name: feed-daemon
+          image: ghcr.io/caiovmv/atum-api:latest
+          command: ["dl-torrent", "feed", "daemon", "--interval", "30"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: atum-secrets
+                  key: DATABASE_URL
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: atum-secrets
+                  key: REDIS_URL
+            - name: DOWNLOAD_RUNNER_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: atum-config
+                  key: DOWNLOAD_RUNNER_URL
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          securityContext:
+            capabilities:
+              add: ["SYS_PTRACE"]

@@ -32,6 +32,7 @@ export function ParametricEQ({ gains, overlay, onChange, onFlat, className = '' 
             type="button"
             className={`receiver-eq-flat-btn ${isFlat ? 'receiver-toggle-on' : ''}`}
             onClick={onFlat}
+            aria-label="Resetar EQ para flat"
           >
             <span className="receiver-toggle-indicator" />
           </button>

@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 from pathlib import Path
 
 import httpx
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
 from ...config import get_settings
@@ -35,24 +36,21 @@ _KEEPALIVE_INTERVAL = 30.0
 
 
 async def _stream_feed_events():
-    """Generator SSE: a cada 30 s verifica feed_pending; se mudou envia evento; keepalive a cada 30s."""
-    last_count = -1
+    """Generator SSE: escuta Redis Pub/Sub para eventos de feeds."""
+    from ...event_bus import CHANNEL_FEEDS, async_subscribe
     try:
-        while True:
-            pending = await asyncio.to_thread(pending_list)
-            count = len(pending) if isinstance(pending, list) else 0
-            if count != last_count:
-                last_count = count
+        async for channel, data in async_subscribe(CHANNEL_FEEDS, keepalive_interval=_KEEPALIVE_INTERVAL):
+            if channel:
                 yield f"data: {json.dumps({'event': 'feeds_pending_updated'})}\n\n"
-            yield ": keepalive\n\n"
-            await asyncio.sleep(_KEEPALIVE_INTERVAL)
+            else:
+                yield ": keepalive\n\n"
     except (asyncio.CancelledError, GeneratorExit):
         pass
 
 
 @router.get("/events")
 async def feed_events():
-    """SSE: stream de eventos de atualização dos pendentes (verificação a cada 30 s)."""
+    """SSE: stream de eventos de feeds via Redis Pub/Sub."""
     return StreamingResponse(
         _stream_feed_events(),
         media_type="text/event-stream",
@@ -75,9 +73,14 @@ def _runner_url(path: str) -> str:
 
 
 @router.get("")
-def list_feeds() -> list[dict]:
-    """Lista todos os feeds (id, url, title, content_type, created_at)."""
-    return list_feed_records()
+def list_feeds(request: Request):
+    """Lista todos os feeds (id, url, title, content_type, created_at). ETag para revalidação."""
+    data = list_feed_records()
+    body = json.dumps(data, default=str, ensure_ascii=False)
+    etag = hashlib.md5(body.encode()).hexdigest()
+    if request.headers.get("if-none-match") == f'"{etag}"':
+        return Response(status_code=304)
+    return Response(content=body, media_type="application/json", headers={"ETag": f'"{etag}"', "Cache-Control": "private, max-age=0, must-revalidate"})
 
 
 class AddFeedBody(BaseModel):
@@ -97,6 +100,8 @@ def add_feed(body: AddFeedBody) -> dict:
     fid = add_feed_record(url, title=None, content_type=ct)
     if fid <= 0:
         raise HTTPException(status_code=400, detail="Feed já existe ou falha ao adicionar.")
+    from ...event_bus import CHANNEL_FEEDS, publish
+    publish(CHANNEL_FEEDS, {"type": "feed_added", "id": fid})
     return {"id": fid}
 
 
@@ -106,6 +111,8 @@ def remove_feed(feed_id: int) -> dict:
     deleted = delete_feed_record(feed_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Feed não encontrado.")
+    from ...event_bus import CHANNEL_FEEDS, publish
+    publish(CHANNEL_FEEDS, {"type": "feed_deleted", "id": feed_id})
     return {"ok": True}
 
 
@@ -146,13 +153,24 @@ def poll_feeds(body: PollBody) -> dict:
             )
         except Exception as exc:
             logger.debug("Falha ao criar notificação de feed: %s", exc)
+        from ...event_bus import CHANNEL_FEEDS, publish
+        publish(CHANNEL_FEEDS, {"type": "feed_polled", "saved": saved})
     return result
 
 
 @router.get("/pending")
-def list_pending() -> list[dict]:
-    """Lista itens pendentes (salvos pelo poll)."""
-    return pending_list()
+def list_pending(
+    request: Request,
+    limit: int | None = Query(None, ge=1, le=500, description="Máximo de itens a retornar"),
+    offset: int | None = Query(None, ge=0, description="Pular N itens"),
+):
+    """Lista itens pendentes (salvos pelo poll). ETag para revalidação."""
+    data = pending_list(limit=limit, offset=offset)
+    body = json.dumps(data, default=str, ensure_ascii=False)
+    etag = hashlib.md5(body.encode()).hexdigest()
+    if request.headers.get("if-none-match") == f'"{etag}"':
+        return Response(status_code=304)
+    return Response(content=body, media_type="application/json", headers={"ETag": f'"{etag}"', "Cache-Control": "private, max-age=0, must-revalidate"})
 
 
 class AddToDownloadsBody(BaseModel):
@@ -166,10 +184,6 @@ def add_pending_to_downloads(body: AddToDownloadsBody) -> dict:
     if not body.pending_ids:
         return {"added": [], "errors": ["Nenhum id informado."], "ok": 0, "fail": 0}
     s = get_settings()
-    save_path_base = (
-        (getattr(s, "download_dir", "") or getattr(s, "watch_folder", "") or "./downloads")
-    ).strip()
-    save_path_base = str(Path(save_path_base).expanduser().resolve())
     added: list[int] = []
     errors: list[str] = []
     for pid in body.pending_ids:
@@ -187,6 +201,7 @@ def add_pending_to_downloads(body: AddToDownloadsBody) -> dict:
         content_type = str(content_type).strip().lower()
         if content_type not in ("music", "movies", "tv"):
             content_type = "music"
+        save_path_base = s.save_path_for_content_type(content_type)
         if body.organize and title:
             subpath = extract_subpath_by_content_type(title, content_type)
             save_path = str(Path(save_path_base) / subpath)
@@ -214,4 +229,7 @@ def add_pending_to_downloads(body: AddToDownloadsBody) -> dict:
         data = resp.json()
         added.append(data.get("id", 0))
         pending_delete(pid)
+    if added:
+        from ...event_bus import CHANNEL_FEEDS, publish
+        publish(CHANNEL_FEEDS, {"type": "pending_to_downloads", "count": len(added)})
     return {"added": added, "errors": errors, "ok": len(added), "fail": len(errors)}

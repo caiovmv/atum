@@ -154,8 +154,13 @@ def enrich_tv(title: str, year: int | None = None) -> EnrichedMetadata:
     if not tmdb_id:
         return EnrichedMetadata(title=title, year=year, content_type="tv")
 
-    detail = _get_tv_detail(int(tmdb_id), api_key)
-    imdb_id = _get_imdb_id_for_tv(int(tmdb_id), api_key)
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        f_detail = pool.submit(_get_tv_detail, int(tmdb_id), api_key)
+        f_imdb = pool.submit(_get_imdb_id_for_tv, int(tmdb_id), api_key)
+        detail = f_detail.result()
+        imdb_id = f_imdb.result()
 
     if not detail:
         first_air = best.get("first_air_date") or ""

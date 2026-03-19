@@ -1,0 +1,126 @@
+/* ─── Skeleton Shimmer ─── */
+
+@keyframes skeleton-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--atum-card) 25%,
+    var(--atum-card-hover) 37%,
+    var(--atum-card) 63%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.skeleton-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 140px;
+  max-width: 180px;
+  flex-shrink: 0;
+}
+
+.skeleton-card-image {
+  width: 100%;
+  padding-bottom: 100%;
+}
+
+.skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+}
+
+.skeleton-row-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.skeleton-hero {
+  width: 100%;
+  height: clamp(180px, 30vh, 340px);
+  margin-bottom: 1.5rem;
+}
+
+.skeleton-rail {
+  margin-bottom: 1.5rem;
+}
+
+.skeleton-rail-title {
+  margin-bottom: 0.75rem;
+}
+
+.skeleton-rail-items {
+  display: flex;
+  gap: 1rem;
+  overflow: hidden;
+}
+
+/* ─── Search Result Card Skeleton ─── */
+.skeleton-search-result-card {
+  background: var(--atum-card);
+  border-radius: 8px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.skeleton-search-result-cover {
+  aspect-ratio: 2 / 3;
+  width: 100%;
+  border-radius: 6px;
+  margin-bottom: 0.75rem;
+  overflow: hidden;
+}
+
+.skeleton-search-result-title {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0.5rem 0;
+}
+
+.skeleton-search-result-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.skeleton-search-result-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: auto;
+}
+
+.skeleton-search-result-actions .skeleton {
+  flex: 1;
+}
+
+/* ─── Player fullscreen loading ─── */
+.skeleton-player {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  background: var(--atum-bg);
+}
+
+.skeleton-player-title {
+  max-width: 320px;
+}
+
+.skeleton-player-meta {
+  max-width: 200px;
+}

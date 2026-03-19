@@ -15,8 +15,10 @@ from .db import (
     add_feed_record,
     get_feed_by_id,
     is_processed,
+    is_processed_batch,
     list_feed_records,
     mark_processed,
+    mark_processed_batch,
     pending_add,
     pending_delete,
     pending_list,
@@ -119,17 +121,18 @@ def poll_feeds_api(
     rows = list_feed_records()
     if not rows:
         return {"saved": 0, "new_items": [], "errors": ["Nenhum feed inscrito."], "deduped": 0}
-    items = _collect_new_items(format_filter, include_list, exclude_list)
+    items = _collect_new_items(format_filter, include_list, exclude_list, rows=rows)
     if not items:
         return {"saved": 0, "new_items": [], "errors": [], "deduped": 0}
     saved = 0
     deduped = 0
     new_items: list[dict] = []
+    to_mark: list[tuple[int, str, str | None, str | None]] = []
     for it in items:
         key = _normalized_content_key(it["title"])
         if existing_keys and key in existing_keys:
             deduped += 1
-            mark_processed(it["feed_id"], it["entry_id"], entry_link=it["link"], title=it["title"])
+            to_mark.append((it["feed_id"], it["entry_id"], it["link"], it["title"]))
             continue
         pid = pending_add(
             it["feed_id"],
@@ -149,7 +152,9 @@ def poll_feeds_api(
                 "quality_label": it["quality_label"],
                 "content_type": it.get("content_type") or "music",
             })
-        mark_processed(it["feed_id"], it["entry_id"], entry_link=it["link"], title=it["title"])
+        to_mark.append((it["feed_id"], it["entry_id"], it["link"], it["title"]))
+    if to_mark:
+        mark_processed_batch(to_mark)
     return {"saved": saved, "new_items": new_items, "errors": errors, "deduped": deduped}
 
 
@@ -158,17 +163,24 @@ def _parse_feed(url: str) -> feedparser.FeedParserDict:
     return feedparser.parse(url)
 
 
-def _collect_new_items(format_filter: str | None, include_list, exclude_list) -> list[dict]:
+def _collect_new_items(
+    format_filter: str | None,
+    include_list,
+    exclude_list,
+    rows: list[dict] | None = None,
+) -> list[dict]:
     """Coleta todos os itens novos dos feeds que passam nos filtros. Não marca como processado.
-    Faz o download/parse dos feeds em paralelo via ThreadPoolExecutor."""
+    Faz o download/parse dos feeds em paralelo via ThreadPoolExecutor.
+    Usa batch DB queries para minimizar round-trips."""
     items: list[dict] = []
-    rows = list_feed_records()
+    if rows is None:
+        rows = list_feed_records()
     if not rows:
         return items
 
     # Fase 1: parse de todos os feeds em paralelo
     parsed_feeds: dict[int, tuple[dict, feedparser.FeedParserDict]] = {}
-    max_workers = min(len(rows), 4)
+    max_workers = min(len(rows), 8)
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         future_to_rec = {pool.submit(_parse_feed, rec["url"]): rec for rec in rows}
         for future in as_completed(future_to_rec):
@@ -182,7 +194,8 @@ def _collect_new_items(format_filter: str | None, include_list, exclude_list) ->
             except Exception as exc:
                 typer.echo(f"Erro ao ler feed {rec['url']}: {exc}")
 
-    # Fase 2: processar entries sequencialmente (envolve DB)
+    # Fase 2: processar entries com batch DB lookups
+    to_mark: list[tuple[int, str, str | None, str | None]] = []
     for feed_id, (rec, parsed) in parsed_feeds.items():
         content_type = rec.get("content_type") or "music"
         use_video = content_type in ("movies", "tv")
@@ -196,13 +209,19 @@ def _collect_new_items(format_filter: str | None, include_list, exclude_list) ->
             )
         )
         entries = getattr(parsed, "entries", []) or []
+        if not entries:
+            continue
+
+        all_entry_ids = [_entry_id(entry) for entry in entries]
+        already_processed = is_processed_batch(feed_id, all_entry_ids)
+
         for entry in entries:
             entry_id = _entry_id(entry)
-            if is_processed(feed_id, entry_id):
+            if entry_id in already_processed:
                 continue
             title = (getattr(entry, "title", None) or "").strip()
             if not _matches_include_exclude(title, include_list, exclude_list):
-                mark_processed(feed_id, entry_id, entry_link=None, title=title)
+                to_mark.append((feed_id, entry_id, None, title))
                 continue
             link = _entry_link(entry)
             if use_video:
@@ -212,7 +231,7 @@ def _collect_new_items(format_filter: str | None, include_list, exclude_list) ->
                 quality = parse_quality(title)
                 accept = allowed is None or matches_format(quality, allowed)
             if not accept:
-                mark_processed(feed_id, entry_id, entry_link=link, title=title)
+                to_mark.append((feed_id, entry_id, link, title))
                 continue
             items.append({
                 "feed_id": feed_id,
@@ -222,6 +241,10 @@ def _collect_new_items(format_filter: str | None, include_list, exclude_list) ->
                 "quality_label": quality.label,
                 "content_type": content_type,
             })
+
+    if to_mark:
+        mark_processed_batch(to_mark)
+
     return items
 
 
@@ -253,7 +276,7 @@ def poll_feeds(
         typer.echo("Nenhum feed inscrito. Use: feed add <url>")
         return
 
-    items = _collect_new_items(format_filter, include_list, exclude_list)
+    items = _collect_new_items(format_filter, include_list, exclude_list, rows=rows)
     if not items:
         typer.echo("Nenhuma novidade.")
         return
@@ -263,6 +286,7 @@ def poll_feeds(
 
         save_path_base = (getattr(s, "download_dir", "") or s.watch_folder or "./downloads").strip()
         save_path_base = str(Path(save_path_base).expanduser().resolve())
+        to_mark: list[tuple[int, str, str | None, str | None]] = []
         for it in items:
             title = it["title"]
             link = it["link"]
@@ -298,11 +322,20 @@ def poll_feeds(
             except Exception as exc:
                 import logging
                 logging.getLogger(__name__).debug("Falha ao enviar notificação de feed: %s", exc)
-            mark_processed(it["feed_id"], it["entry_id"], entry_link=link, title=title)
+            to_mark.append((it["feed_id"], it["entry_id"], link, title))
+        if to_mark:
+            mark_processed_batch(to_mark)
+        if to_mark:
+            try:
+                from .event_bus import CHANNEL_FEEDS, publish
+                publish(CHANNEL_FEEDS, {"type": "feed_auto_downloaded", "count": len(to_mark)})
+            except Exception:
+                pass
         return
 
     # Sem auto_download: salva no DB para o usuário escolher depois com 'feed pending'
     saved = 0
+    to_mark_pending: list[tuple[int, str, str | None, str | None]] = []
     for it in items:
         pid = pending_add(
             it["feed_id"],
@@ -313,7 +346,15 @@ def poll_feeds(
         )
         if pid:
             saved += 1
-        mark_processed(it["feed_id"], it["entry_id"], entry_link=it["link"], title=it["title"])
+        to_mark_pending.append((it["feed_id"], it["entry_id"], it["link"], it["title"]))
+    if to_mark_pending:
+        mark_processed_batch(to_mark_pending)
+    if saved > 0:
+        try:
+            from .event_bus import CHANNEL_FEEDS, publish
+            publish(CHANNEL_FEEDS, {"type": "feed_polled", "saved": saved})
+        except Exception:
+            pass
     typer.echo(f"{saved} item(ns) salvo(s) no banco. Use 'dl-torrent feed pending' para listar e escolher o que baixar.")
 
 

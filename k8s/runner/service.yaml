@@ -1,0 +1,122 @@
+# Service interno (ClusterIP) para que outros pods acessem o runner na porta 9092
+apiVersion: v1
+kind: Service
+metadata:
+  name: runner
+  namespace: atum
+  labels:
+    app.kubernetes.io/name: runner
+    app.kubernetes.io/component: torrent-runner
+spec:
+  selector:
+    app.kubernetes.io/name: runner
+  ports:
+    - port: 9092
+      targetPort: 9092
+      name: api
+---
+# Service externo (LoadBalancer) para expor as portas BitTorrent TCP ao mundo.
+# K8s não suporta TCP e UDP no mesmo Service, por isso são dois objetos separados.
+apiVersion: v1
+kind: Service
+metadata:
+  name: runner-bittorrent-tcp
+  namespace: atum
+  labels:
+    app.kubernetes.io/name: runner
+    app.kubernetes.io/component: torrent-runner
+  annotations:
+    # Descomente e ajuste conforme o seu cloud provider:
+    # service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: runner
+  ports:
+    - port: 6881
+      targetPort: 6881
+      protocol: TCP
+      name: bt-tcp-6881
+    - port: 6882
+      targetPort: 6882
+      protocol: TCP
+      name: bt-tcp-6882
+    - port: 6883
+      targetPort: 6883
+      protocol: TCP
+      name: bt-tcp-6883
+    - port: 6884
+      targetPort: 6884
+      protocol: TCP
+      name: bt-tcp-6884
+    - port: 6885
+      targetPort: 6885
+      protocol: TCP
+      name: bt-tcp-6885
+    - port: 6886
+      targetPort: 6886
+      protocol: TCP
+      name: bt-tcp-6886
+    - port: 6887
+      targetPort: 6887
+      protocol: TCP
+      name: bt-tcp-6887
+    - port: 6888
+      targetPort: 6888
+      protocol: TCP
+      name: bt-tcp-6888
+    - port: 6889
+      targetPort: 6889
+      protocol: TCP
+      name: bt-tcp-6889
+---
+# Service externo para portas BitTorrent UDP
+apiVersion: v1
+kind: Service
+metadata:
+  name: runner-bittorrent-udp
+  namespace: atum
+  labels:
+    app.kubernetes.io/name: runner
+    app.kubernetes.io/component: torrent-runner
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: runner
+  ports:
+    - port: 6881
+      targetPort: 6881
+      protocol: UDP
+      name: bt-udp-6881
+    - port: 6882
+      targetPort: 6882
+      protocol: UDP
+      name: bt-udp-6882
+    - port: 6883
+      targetPort: 6883
+      protocol: UDP
+      name: bt-udp-6883
+    - port: 6884
+      targetPort: 6884
+      protocol: UDP
+      name: bt-udp-6884
+    - port: 6885
+      targetPort: 6885
+      protocol: UDP
+      name: bt-udp-6885
+    - port: 6886
+      targetPort: 6886
+      protocol: UDP
+      name: bt-udp-6886
+    - port: 6887
+      targetPort: 6887
+      protocol: UDP
+      name: bt-udp-6887
+    - port: 6888
+      targetPort: 6888
+      protocol: UDP
+      name: bt-udp-6888
+    - port: 6889
+      targetPort: 6889
+      protocol: UDP
+      name: bt-udp-6889

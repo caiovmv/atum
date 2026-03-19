@@ -162,6 +162,27 @@ def _strip_leading_comments(stmt: str) -> str:
     return "\n".join(lines).strip()
 
 
+def _split_sql(sql: str) -> list[str]:
+    """Split SQL respecting $$ dollar-quoted blocks (DO $$ ... $$;)."""
+    stmts: list[str] = []
+    buf: list[str] = []
+    in_dollar = False
+    for ch in sql:
+        buf.append(ch)
+        joined = "".join(buf)
+        if not in_dollar and joined.endswith("$$"):
+            in_dollar = True
+        elif in_dollar and joined.endswith("$$") and len(joined) > 2:
+            in_dollar = False
+        elif ch == ";" and not in_dollar:
+            stmts.append("".join(buf[:-1]))
+            buf.clear()
+    remainder = "".join(buf).strip()
+    if remainder:
+        stmts.append(remainder)
+    return stmts
+
+
 def _ensure_schema_postgres(conn) -> None:
     """Aplica schema principal e migrations pendentes (versionamento por scripts/migrations/)."""
     base = Path(__file__).resolve().parent.parent.parent / "scripts"
@@ -169,7 +190,7 @@ def _ensure_schema_postgres(conn) -> None:
     if schema_path.is_file():
         schema_sql = schema_path.read_text(encoding="utf-8")
         with conn.cursor() as cur:
-            for stmt in schema_sql.split(";"):
+            for stmt in _split_sql(schema_sql):
                 stmt = _strip_leading_comments(stmt.strip())
                 if stmt:
                     cur.execute(stmt)
@@ -197,7 +218,7 @@ def _run_pending_migrations(conn, migrations_dir: Path) -> None:
             continue
         migration_sql = path.read_text(encoding="utf-8")
         with conn.cursor() as cur:
-            for stmt in migration_sql.split(";"):
+            for stmt in _split_sql(migration_sql):
                 stmt = _strip_leading_comments(stmt.strip())
                 if stmt:
                     cur.execute(stmt)

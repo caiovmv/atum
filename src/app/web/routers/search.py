@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import time
 from typing import Literal
 
 import httpx
@@ -26,13 +28,40 @@ from ..cover_service import get_tmdb_detail_by_title
 
 router = APIRouter()
 
+_SEARCH_CACHE: dict[str, tuple[float, list[SearchResult]]] = {}
+_SEARCH_CACHE_TTL = 300  # 5 min
+_SEARCH_CACHE_MAX = 50
+
+
+def _cache_key(query: str, limit: int, content_type: str, sort_by: str,
+               format_filter: str | None, indexers: list[str]) -> str:
+    raw = f"{query}|{limit}|{content_type}|{sort_by}|{format_filter}|{','.join(sorted(indexers))}"
+    return hashlib.md5(raw.encode()).hexdigest()
+
+
+def _cache_get(key: str) -> list[SearchResult] | None:
+    entry = _SEARCH_CACHE.get(key)
+    if entry and (time.monotonic() - entry[0]) < _SEARCH_CACHE_TTL:
+        return entry[1]
+    if entry:
+        _SEARCH_CACHE.pop(key, None)
+    return None
+
+
+def _cache_set(key: str, results: list[SearchResult]) -> None:
+    if len(_SEARCH_CACHE) >= _SEARCH_CACHE_MAX:
+        oldest_key = min(_SEARCH_CACHE, key=lambda k: _SEARCH_CACHE[k][0])
+        _SEARCH_CACHE.pop(oldest_key, None)
+    _SEARCH_CACHE[key] = (time.monotonic(), results)
+
 
 def _run_search(
     q: str, limit: int, format_filter: str | None, no_quality_filter: bool,
     music_category_only: bool, content_type: str, indexer_list: list[str],
     sort_by: str,
 ) -> list[dict]:
-    """Executa busca + enriquecimento de metadados (sync, roda em thread)."""
+    """Executa busca + enriquecimento de metadados (sync, roda em thread). Popula o cache."""
+    ck = _cache_key(q, limit, content_type, sort_by, format_filter, indexer_list)
     results = search_all(
         query=q,
         limit=limit,
@@ -44,6 +73,8 @@ def _run_search(
         indexers=indexer_list or None,
         sort_by=sort_by,
     )
+    _cache_set(ck, results)
+
     out: list[dict] = []
     for r in results:
         d = result_to_dict(r)
@@ -164,7 +195,7 @@ def _runner_url(path: str) -> str:
 
 @router.post("/add-from-search")
 async def add_from_search(body: AddFromSearchBody) -> dict:
-    """Reexecuta a busca, resolve magnets dos índices e envia ao Runner."""
+    """Busca (com cache) e resolve magnets dos índices selecionados, enviando ao Runner."""
     full_query = f"{body.query} {body.album or ''}".strip()
     s = get_settings()
     indexer_list = body.indexers
@@ -175,25 +206,25 @@ async def add_from_search(body: AddFromSearchBody) -> dict:
         indexer_list = [x.strip().lower() for x in indexer_list if x and x.strip() and x.strip().lower() in ALL_INDEXERS]
         if not indexer_list:
             indexer_list = list(DEFAULT_INDEXERS)
-    results = await asyncio.to_thread(
-        search_all,
-        query=full_query,
-        limit=body.limit,
-        format_filter=body.format_filter,
-        no_quality_filter=body.no_quality_filter,
-        verbose=False,
-        music_category_only=body.music_category_only,
-        content_type=body.content_type,
-        indexers=indexer_list,
-        sort_by=body.sort_by,
-    )
-    s = get_settings()
-    save_path = (
-        (body.save_path or "").strip()
-        or getattr(s, "download_dir", "")
-        or getattr(s, "watch_folder", "")
-        or "./downloads"
-    )
+
+    ck = _cache_key(full_query, body.limit, body.content_type, body.sort_by, body.format_filter, indexer_list)
+    results = _cache_get(ck)
+    if results is None:
+        results = await asyncio.to_thread(
+            search_all,
+            query=full_query,
+            limit=body.limit,
+            format_filter=body.format_filter,
+            no_quality_filter=body.no_quality_filter,
+            verbose=False,
+            music_category_only=body.music_category_only,
+            content_type=body.content_type,
+            indexers=indexer_list,
+            sort_by=body.sort_by,
+        )
+        _cache_set(ck, results)
+
+    save_path = (body.save_path or "").strip() or s.save_path_for_content_type(body.content_type)
     added: list[int] = []
     errors: list[str] = []
     async with httpx.AsyncClient(timeout=30) as client:

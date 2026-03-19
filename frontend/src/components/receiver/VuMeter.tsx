@@ -6,10 +6,10 @@ const SCALE_MARKS = [-20, -15, -10, -7, -5, -3, -1, 0, 1, 2, 3];
 const ATTACK_MS = 300;
 const DECAY_MS = 1500;
 
-const VFD = '#00e5c8';
-const VFD_DIM = 'rgba(0, 229, 200, 0.15)';
-const VFD_SCALE = 'rgba(0, 229, 200, 0.5)';
-const VFD_TEXT = 'rgba(0, 229, 200, 0.6)';
+const VFD = 'var(--atum-accent)';
+const VFD_DIM = 'var(--atum-accent-dim)';
+const VFD_SCALE = 'var(--atum-accent-scale)';
+const VFD_TEXT = 'var(--atum-accent-text)';
 
 interface VuMeterProps {
   value: number;

@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+import base64
 from contextlib import asynccontextmanager
+from os import environ
 from pathlib import Path
 
 from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from starlette.responses import FileResponse
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.gzip import GZipMiddleware
+from starlette.requests import Request
+from starlette.responses import FileResponse, Response
 
-from .routers import cover_router, downloads_router, feeds_router, indexers_router, library_router, notifications_router, radio_router, search_router, settings_router, wishlist_router
+from .routers import ai_prompts_router, chat_router, cover_router, downloads_router, feeds_router, indexers_router, library_router, notifications_router, playlist_router, radio_router, recommendations_router, search_router, settings_router, voice_router, wishlist_router
 
 
 @asynccontextmanager
@@ -37,13 +42,51 @@ async def _lifespan(app: FastAPI):
 
 app = FastAPI(title="dl-torrent Web API", version="0.1.0", lifespan=_lifespan)
 api = APIRouter(prefix="/api")
+_cors_origins_raw = environ.get("CORS_ORIGINS", "*")
+_cors_origins = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()] or ["*"]
+
+app.add_middleware(GZipMiddleware, minimum_size=500)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=_cors_origins,
+    allow_credentials="*" not in _cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+class _BasicAuthMiddleware(BaseHTTPMiddleware):
+    """Exige Authorization: Basic quando BASIC_AUTH_USER e BASIC_AUTH_PASS estão configurados."""
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        from ..config import get_settings
+
+        s = get_settings()
+        if not s.basic_auth_user or not s.basic_auth_pass:
+            return await call_next(request)
+
+        if not request.url.path.startswith("/api/"):
+            return await call_next(request)
+        # Preflight CORS e healthcheck sem auth
+        if request.method == "OPTIONS" or request.url.path in ("/api/indexers/status",):
+            return await call_next(request)
+
+        auth = request.headers.get("Authorization")
+        if not auth or not auth.startswith("Basic "):
+            return Response(status_code=401, headers={"WWW-Authenticate": 'Basic realm="Atum"'})
+
+        try:
+            raw = base64.b64decode(auth[6:]).decode("utf-8")
+            user, _, passwd = raw.partition(":")
+            if user != s.basic_auth_user or passwd != s.basic_auth_pass:
+                return Response(status_code=401, headers={"WWW-Authenticate": 'Basic realm="Atum"'})
+        except Exception:
+            return Response(status_code=401, headers={"WWW-Authenticate": 'Basic realm="Atum"'})
+
+        return await call_next(request)
+
+
+app.add_middleware(_BasicAuthMiddleware)
 
 api.include_router(search_router)
 api.include_router(indexers_router)
@@ -54,7 +97,12 @@ api.include_router(feeds_router)
 api.include_router(notifications_router)
 api.include_router(library_router)
 api.include_router(radio_router)
+api.include_router(playlist_router)
+api.include_router(voice_router)
 api.include_router(settings_router)
+api.include_router(chat_router)
+api.include_router(recommendations_router)
+api.include_router(ai_prompts_router)
 app.include_router(api)
 
 # SPA Atum: servir frontend build (npm run build em frontend/)
@@ -102,6 +150,16 @@ def radio_spa():
     return _serve_spa_index()
 
 
+@app.get("/playlists", include_in_schema=False)
+def playlists_spa():
+    return _serve_spa_index()
+
+
+@app.get("/playlists/{path:path}", include_in_schema=False)
+def playlists_sub_spa():
+    return _serve_spa_index()
+
+
 @app.get("/settings", include_in_schema=False)
 def settings_spa():
     return _serve_spa_index()
@@ -109,6 +167,26 @@ def settings_spa():
 
 @app.get("/play", include_in_schema=False)
 def play_spa():
+    return _serve_spa_index()
+
+
+@app.get("/play/{path:path}", include_in_schema=False)
+def play_sub_spa():
+    return _serve_spa_index()
+
+
+@app.get("/play-receiver/{path:path}", include_in_schema=False)
+def play_receiver_spa():
+    return _serve_spa_index()
+
+
+@app.get("/detail/{path:path}", include_in_schema=False)
+def detail_sub_spa():
+    return _serve_spa_index()
+
+
+@app.get("/search", include_in_schema=False)
+def search_spa():
     return _serve_spa_index()
 
 

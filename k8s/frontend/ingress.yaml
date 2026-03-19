@@ -1,0 +1,41 @@
+# Ingress para o frontend — requer nginx-ingress controller instalado no cluster.
+# Para instalar: kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.10.1/deploy/static/provider/cloud/deploy.yaml
+#
+# SSL com cert-manager (recomendado):
+#   kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.14.5/cert-manager.yaml
+#   Descomente as anotações e o tls abaixo após instalar o cert-manager.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: frontend
+  namespace: atum
+  labels:
+    app.kubernetes.io/name: frontend
+    app.kubernetes.io/component: web
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # SSE requer buffering desabilitado
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    # Descomente para SSL automático com cert-manager:
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+    # nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: atum.example.com  # Substitua pelo seu domínio
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80
+  # Descomente para TLS com cert-manager:
+  # tls:
+  #   - hosts:
+  #       - atum.example.com
+  #     secretName: atum-tls

@@ -40,6 +40,15 @@ def is_processed(
     return _pg_is(feed_id, entry_id, _database_url(), conn)
 
 
+def is_processed_batch(
+    feed_id: int,
+    entry_ids: list[str],
+) -> set[str]:
+    """Return the subset of entry_ids already processed for a given feed."""
+    from .feed_repository_postgres import is_processed_batch as _pg_batch
+    return _pg_batch(feed_id, entry_ids, _database_url())
+
+
 def mark_processed(
     feed_id: int,
     entry_id: str,
@@ -51,6 +60,14 @@ def mark_processed(
     """conn ignorado (compatibilidade)."""
     from .feed_repository_postgres import mark_processed as _pg_mark
     _pg_mark(feed_id, entry_id, entry_link, title, _database_url(), conn)
+
+
+def mark_processed_batch(
+    items: list[tuple[int, str, str | None, str | None]],
+) -> None:
+    """Mark multiple entries as processed in a single transaction."""
+    from .feed_repository_postgres import mark_processed_batch as _pg_batch
+    _pg_batch(items, _database_url())
 
 
 def get_feed_by_url(url: str, db_path=None) -> dict | None:
@@ -77,9 +94,9 @@ def pending_add(
     return _pg_add(feed_id, entry_id, title, link, quality_label, _database_url(), conn)
 
 
-def pending_list(db_path=None) -> list[dict]:
+def pending_list(db_path=None, *, limit: int | None = None, offset: int | None = None) -> list[dict]:
     from .feed_repository_postgres import pending_list as _pg_list
-    return _pg_list(_database_url())
+    return _pg_list(_database_url(), limit=limit, offset=offset)
 
 
 def pending_get(pending_id: int, db_path=None) -> dict | None:

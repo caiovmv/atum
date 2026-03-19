@@ -1,0 +1,40 @@
+/* ─── Mini VU Meter (real audio data) ─── */
+
+.mini-vu {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 18px;
+  flex-shrink: 0;
+  padding: 0 2px;
+}
+
+.mini-vu-bar {
+  width: 3px;
+  border-radius: 1px;
+  background: var(--atum-accent);
+  height: 3px;
+  transition: height 0.15s ease;
+}
+
+/* Paused: all bars low */
+.mini-vu:not(.mini-vu--active) .mini-vu-bar {
+  opacity: 0.25;
+}
+
+/* Playing: real levels, glow */
+.mini-vu--active .mini-vu-bar {
+  box-shadow: 0 0 3px var(--atum-accent-glow);
+}
+
+/* ─── Phone: smaller ─── */
+@media (max-width: 599px) {
+  .mini-vu {
+    height: 14px;
+    gap: 1.5px;
+  }
+
+  .mini-vu-bar {
+    width: 2.5px;
+  }
+}

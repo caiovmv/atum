@@ -15,6 +15,7 @@ class DownloadRepository(Protocol):
         name: str | None = None,
         content_type: str | None = None,
         excluded_file_indices: list[int] | None = None,
+        torrent_url: str | None = None,
     ) -> int:
         """Adiciona download à fila. excluded_file_indices: índices de arquivos a não baixar. Retorna id."""
         ...
@@ -71,6 +72,23 @@ class DownloadRepository(Protocol):
         eta_seconds: float | None = None,
     ) -> None:
         """Atualiza campos de progresso."""
+        ...
+
+    def update_enrichment(
+        self,
+        download_id: int,
+        *,
+        tmdb_id: int | None = None,
+        imdb_id: str | None = None,
+        library_path: str | None = None,
+        post_processed: bool | None = None,
+        content_type: str | None = None,
+        previous_content_path: str | None = None,
+        artist: str | None = None,
+        album: str | None = None,
+        genre: str | None = None,
+    ) -> None:
+        """Atualiza colunas de enriquecimento e metadados."""
         ...
 
     def delete(self, download_id: int) -> bool:

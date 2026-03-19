@@ -1,15 +1,3 @@
-.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
 .downloads-page .atum-page-title {
   margin: 0 0 1.5rem;
   font-size: 1.75rem;
@@ -39,7 +27,7 @@
 .downloads-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--atum-overlay-dim);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -92,7 +80,7 @@
 .downloads-pill--active {
   background: var(--atum-accent);
   border-color: var(--atum-accent);
-  color: #000;
+  color: var(--atum-bg);
 }
 
 .downloads-pill--active:hover {
@@ -152,8 +140,12 @@
 .downloads-cards .progress-bar-wrap { max-width: 100%; }
 
 .downloads-error {
-  color: #e74c3c;
+  color: var(--atum-error);
   margin-bottom: 1rem;
+}
+
+.downloads-retry-btn {
+  margin-top: 0.5rem;
 }
 
 .downloads-loading,
@@ -203,9 +195,9 @@
 
 .status-queued { color: var(--atum-text-muted); }
 .status-downloading { color: var(--atum-accent); }
-.status-paused { color: #f39c12; }
-.status-completed { color: #2ecc71; }
-.status-failed { color: #e74c3c; }
+.status-paused { color: var(--atum-warning); }
+.status-completed { color: var(--atum-success); }
+.status-failed { color: var(--atum-error); }
 
 @media (max-width: 768px) {
   .downloads-page .atum-page-title {
@@ -221,7 +213,7 @@
   .downloads-toolbar select,
   .downloads-toolbar button {
     width: 100%;
-    min-height: 44px;
+    min-height: var(--touch-target-min);
   }
 
   .downloads-table-wrap {
@@ -249,4 +241,32 @@
   .name-cell {
     max-width: 140px;
   }
+}
+
+.download-card-cover {
+  position: relative;
+}
+
+.download-card-progress-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--atum-overlay-darker);
+  border-radius: 8px;
+}
+
+.download-error-hint {
+  margin-left: 0.35em;
+  cursor: help;
+  font-size: 0.85em;
+}
+
+.download-card-error {
+  color: var(--atum-error);
+  font-size: 0.78rem;
+  margin: 0.2rem 0 0.3rem;
+  line-height: 1.3;
+  word-break: break-word;
 }

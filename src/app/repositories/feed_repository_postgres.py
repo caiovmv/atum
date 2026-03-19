@@ -29,14 +29,23 @@ def add_feed_record(
             return row["id"] if row else 0
 
 
-def list_feed_records(database_url: str, conn=None) -> list[dict]:
+_DEFAULT_LIMIT = 5000
+
+
+def list_feed_records(database_url: str, conn=None, limit: int | None = None, offset: int | None = None) -> list[dict]:
     """Lista todos os feeds. conn ignorado (cada chamada usa sua conexão)."""
     with connection_postgres(database_url) as c:
         with c.cursor() as cur:
-            cur.execute(
-                """SELECT id, url, title, COALESCE(content_type, 'music') AS content_type, created_at
+            sql = """SELECT id, url, title, COALESCE(content_type, 'music') AS content_type, created_at
                    FROM feeds ORDER BY id"""
-            )
+            params: list = []
+            effective_limit = limit if limit is not None and limit > 0 else _DEFAULT_LIMIT
+            sql += " LIMIT %s"
+            params.append(effective_limit)
+            if offset is not None and offset > 0:
+                sql += " OFFSET %s"
+                params.append(offset)
+            cur.execute(sql, params or None)
             rows = cur.fetchall()
             return [dict(r) for r in rows]
 
@@ -56,6 +65,23 @@ def is_processed(
             return cur.fetchone() is not None
 
 
+def is_processed_batch(
+    feed_id: int,
+    entry_ids: list[str],
+    database_url: str,
+) -> set[str]:
+    """Return the subset of entry_ids already processed for a given feed."""
+    if not entry_ids:
+        return set()
+    with connection_postgres(database_url) as c:
+        with c.cursor() as cur:
+            cur.execute(
+                "SELECT entry_id FROM feed_processed WHERE feed_id = %s AND entry_id = ANY(%s)",
+                (feed_id, entry_ids),
+            )
+            return {row["entry_id"] for row in cur.fetchall()}
+
+
 def mark_processed(
     feed_id: int,
     entry_id: str,
@@ -71,6 +97,25 @@ def mark_processed(
                    VALUES (%s, %s, %s, %s)
                    ON CONFLICT (feed_id, entry_id) DO NOTHING""",
                 (feed_id, entry_id, entry_link, title),
+            )
+            c.commit()
+
+
+def mark_processed_batch(
+    items: list[tuple[int, str, str | None, str | None]],
+    database_url: str = "",
+) -> None:
+    """Mark multiple entries as processed in a single transaction.
+    items: list of (feed_id, entry_id, entry_link, title)."""
+    if not items:
+        return
+    with connection_postgres(database_url) as c:
+        with c.cursor() as cur:
+            cur.executemany(
+                """INSERT INTO feed_processed (feed_id, entry_id, entry_link, title)
+                   VALUES (%s, %s, %s, %s)
+                   ON CONFLICT (feed_id, entry_id) DO NOTHING""",
+                items,
             )
             c.commit()
 
@@ -126,16 +171,22 @@ def pending_add(
             return row["id"] if row else 0
 
 
-def pending_list(database_url: str) -> list[dict]:
+def pending_list(database_url: str, *, limit: int | None = None, offset: int | None = None) -> list[dict]:
     with connection_postgres(database_url) as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """SELECT p.id, p.feed_id, p.entry_id, p.title, p.link, p.quality_label, p.created_at,
+            sql = """SELECT p.id, p.feed_id, p.entry_id, p.title, p.link, p.quality_label, p.created_at,
                           COALESCE(f.content_type, 'music') AS content_type
                    FROM feed_pending p
                    LEFT JOIN feeds f ON p.feed_id = f.id
                    ORDER BY p.id"""
-            )
+            params: list[object] = []
+            effective_limit = limit if limit is not None and limit > 0 else _DEFAULT_LIMIT
+            sql += " LIMIT %s"
+            params.append(effective_limit)
+            if offset is not None and offset > 0:
+                sql += " OFFSET %s"
+                params.append(offset)
+            cur.execute(sql, params or None)
             return [dict(r) for r in cur.fetchall()]
 
 

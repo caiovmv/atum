@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sync-daemon
+  namespace: atum
+  labels:
+    app.kubernetes.io/name: sync-daemon
+    app.kubernetes.io/component: daemon
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sync-daemon
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sync-daemon
+        app.kubernetes.io/component: daemon
+    spec:
+      containers:
+        - name: sync-daemon
+          image: ghcr.io/caiovmv/atum-api:latest
+          command: ["dl-torrent", "sync", "daemon", "--interval", "300"]
+          envFrom:
+            - configMapRef:
+                name: atum-config
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: atum-secrets
+                  key: DATABASE_URL
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: atum-secrets
+                  key: REDIS_URL
+            - name: TMDB_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: atum-secrets
+                  key: TMDB_API_KEY
+            - name: TMDB_READ_ACCESS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: atum-secrets
+                  key: TMDB_READ_ACCESS_TOKEN
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: covers
+              mountPath: /app/covers
+            - name: library-music
+              mountPath: /library/music
+            - name: library-videos
+              mountPath: /library/videos
+          securityContext:
+            capabilities:
+              add: ["SYS_PTRACE"]
+      volumes:
+        - name: covers
+          persistentVolumeClaim:
+            claimName: api-covers
+        - name: library-music
+          persistentVolumeClaim:
+            claimName: library-music
+        - name: library-videos
+          persistentVolumeClaim:
+            claimName: library-videos

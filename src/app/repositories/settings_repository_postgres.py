@@ -55,6 +55,13 @@ SETTINGS_DEFAULTS: dict[str, Any] = {
     "ai_fallback_model": "",
     "ai_fallback_api_key": "",
     "ai_fallback_base_url": "",
+    # Parâmetros globais do modelo (máximos por padrão)
+    "ai_num_ctx": 131072,  # 128K - janela de contexto Ollama
+    "ai_num_predict": 8192,  # max tokens saída Ollama
+    "ai_max_tokens": 8192,  # max tokens saída OpenRouter/OpenAI
+    "ai_temperature": 0.4,  # temperatura padrão global
+    # System prompts por funcionalidade (override do default). Chave = prompt_id.
+    "ai_prompts": {},
 }
 
 # Chaves que contêm segredos (mascarar no GET público)

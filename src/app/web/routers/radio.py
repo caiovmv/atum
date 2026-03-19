@@ -206,12 +206,15 @@ def api_upload_radio_cover(sintonia_id: int, file: UploadFile = File(...)) -> di
         ext = ".png"
     elif "webp" in content_type:
         ext = ".webp"
+    _MAX_COVER_BYTES = 5 * 1024 * 1024  # 5 MB
     dest_dir = _radio_cover_dir()
     dest = dest_dir / f"{sintonia_id}{ext}"
     try:
-        data = file.file.read()
+        data = file.file.read(_MAX_COVER_BYTES + 1)
         if not data:
             raise HTTPException(status_code=400, detail="Arquivo vazio.")
+        if len(data) > _MAX_COVER_BYTES:
+            raise HTTPException(status_code=413, detail="Arquivo muito grande (máx 5 MB).")
         dest.write_bytes(data)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

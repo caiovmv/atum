@@ -1,0 +1,99 @@
+.pwa-install-banner {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: var(--z-toast);
+  padding: var(--space-2) var(--space-4);
+  padding-bottom: calc(var(--space-2) + var(--safe-bottom));
+  background: var(--atum-card);
+  border-top: 1px solid var(--atum-border);
+  box-shadow: 0 -4px 20px var(--shadow-lg);
+}
+
+.pwa-install-banner-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.pwa-install-banner-content {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.pwa-install-banner-icon {
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  color: var(--atum-accent);
+}
+
+.pwa-install-banner-title {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--atum-text);
+}
+
+.pwa-install-banner-desc {
+  margin: 0.15rem 0 0;
+  font-size: var(--text-sm);
+  color: var(--atum-text-muted);
+}
+
+.pwa-install-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.pwa-install-banner-btn {
+  white-space: nowrap;
+}
+
+.pwa-install-banner-dismiss {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--touch-target-min);
+  height: var(--touch-target-min);
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--atum-text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: color 0.15s, background 0.15s;
+}
+
+.pwa-install-banner-dismiss:hover {
+  color: var(--atum-text);
+  background: var(--atum-hover);
+}
+
+/* Shift up when NowPlayingBar is visible */
+.atum-layout--has-player .pwa-install-banner {
+  bottom: 64px;
+}
+
+@media (max-width: 599px) {
+  .atum-layout--has-player .pwa-install-banner {
+    bottom: calc(60px + 64px + var(--safe-bottom));
+  }
+
+  .pwa-install-banner-inner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pwa-install-banner-actions {
+    justify-content: flex-end;
+  }
+}

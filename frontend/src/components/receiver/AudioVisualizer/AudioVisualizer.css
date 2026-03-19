@@ -1,0 +1,110 @@
+.audio-visualizer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.audio-visualizer-backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--atum-overlay);
+  cursor: pointer;
+}
+
+.audio-visualizer-content {
+  position: relative;
+  width: 95vw;
+  max-width: 1200px;
+  height: 85vh;
+  max-height: 800px;
+  background: var(--atum-bg);
+  border-radius: 12px;
+  border: 1px solid var(--atum-accent-20);
+  box-shadow: 0 0 40px var(--atum-accent-10);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.audio-visualizer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: var(--atum-overlay-dim);
+  border-bottom: 1px solid var(--atum-overlay-light-2);
+}
+
+.audio-visualizer-modes {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: calc(100% - 50px);
+  padding-bottom: 2px;
+}
+
+.audio-visualizer-mode-btn {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.8rem;
+  font-family: inherit;
+  color: var(--atum-text-on-dark);
+  background: var(--atum-overlay-light);
+  border: 1px solid var(--atum-overlay-light-2);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 0.2s, background 0.2s, border-color 0.2s;
+}
+
+.audio-visualizer-mode-btn:hover {
+  color: var(--atum-white);
+  background: var(--atum-overlay-light-2);
+}
+
+.audio-visualizer-mode-btn--active {
+  color: var(--atum-accent);
+  background: var(--atum-accent-10);
+  border-color: var(--atum-accent-glow);
+}
+
+.audio-visualizer-close {
+  width: 36px;
+  height: 36px;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--atum-text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 0.2s, background 0.2s;
+}
+
+.audio-visualizer-close:hover {
+  color: var(--atum-white);
+  background: var(--atum-overlay-light-2);
+}
+
+.audio-visualizer-canvas-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.audio-visualizer-canvas-wrap canvas {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.audio-visualizer-empty {
+  color: var(--atum-text-muted);
+  font-size: 1rem;
+  text-align: center;
+  padding: 2rem;
+}

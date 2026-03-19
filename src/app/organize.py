@@ -1,21 +1,49 @@
 """Helper para organizar downloads em subpastas conforme o tipo (Artist/Album, Movie, Show/Season).
 
-Inclui funções de naming Plex-compatible para gerar paths completos com nomes de arquivo."""
+Inclui funções de naming Plex-compatible para gerar paths completos com nomes de arquivo.
+Usa guessit para parsing robusto de títulos de torrent (filmes/séries) com fallback regex."""
 
 from __future__ import annotations
 
 import re
 from typing import Literal
 
-ContentType = Literal["music", "movies", "tv"]
+ContentType = Literal["music", "movies", "tv", "concerts"]
+
+_guessit_available = True
+try:
+    from guessit import guessit as _guessit
+except ImportError:
+    _guessit_available = False
+    _guessit = None  # type: ignore[assignment]
 
 
 def _sanitize(name: str, max_len: int = 80) -> str:
     """Remove caracteres inválidos para path e limita tamanho."""
-    # Windows: \ / : * ? " < > |
     s = re.sub(r'[\\/:*?"<>|]', " ", name)
     s = re.sub(r"\s+", " ", s).strip()
     return s[:max_len] if s else "Unknown"
+
+
+def _normalize_torrent_title(title: str) -> str:
+    """Normaliza separadores de torrent (pontos, underscores) para espaços, preservando extensões."""
+    s = re.sub(r"[\._]", " ", title)
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+
+# ---------------------------------------------------------------------------
+# Parsing com guessit (filmes/séries)
+# ---------------------------------------------------------------------------
+
+def _guessit_parse(title: str) -> dict | None:
+    """Tenta parsear título via guessit. Retorna dict ou None se indisponível."""
+    if not _guessit_available or not _guessit:
+        return None
+    try:
+        return dict(_guessit(title))
+    except Exception:
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -29,22 +57,25 @@ def plex_movie_folder(
     imdb_id: str | None = None,
     include_tmdb: bool = True,
     include_imdb: bool = False,
+    edition: str | None = None,
 ) -> str:
     """
     Gera nome de pasta Plex-compatible para filme.
-    Ex: 'Inception (2010) {tmdb-27205}' ou 'Inception (2010) {imdb-tt1375666}'
+    Ex: 'Inception (2010) {tmdb-27205}' ou 'Inception (2010) {edition-Director_s Cut} {tmdb-27205}'
     """
     name = _sanitize(title.strip(), max_len=60) if title else "Unknown"
     parts = [name]
     if year:
         parts = [f"{name} ({year})"]
+    if edition:
+        parts.append(f"{{edition-{_sanitize(edition, max_len=30)}}}")
     ids = []
     if include_tmdb and tmdb_id:
         ids.append(f"{{tmdb-{tmdb_id}}}")
     if include_imdb and imdb_id:
         ids.append(f"{{{imdb_id}}}" if imdb_id.startswith("imdb-") else f"{{imdb-{imdb_id}}}")
     folder = " ".join(parts + ids)
-    return _sanitize(folder, max_len=120)
+    return _sanitize(folder, max_len=140)
 
 
 def plex_movie_path(
@@ -55,12 +86,13 @@ def plex_movie_path(
     imdb_id: str | None = None,
     include_tmdb: bool = True,
     include_imdb: bool = False,
+    edition: str | None = None,
 ) -> str:
     """
     Gera path Plex-compatible completo para filme (pasta + arquivo).
     Ex: 'Inception (2010) {tmdb-27205}/Inception (2010).mkv'
     """
-    folder = plex_movie_folder(title, year, tmdb_id, imdb_id, include_tmdb, include_imdb)
+    folder = plex_movie_folder(title, year, tmdb_id, imdb_id, include_tmdb, include_imdb, edition)
     name = _sanitize(title.strip(), max_len=60) if title else "Unknown"
     filename = f"{name} ({year}){ext}" if year else f"{name}{ext}"
     return f"{folder}/{_sanitize(filename, max_len=100)}"
@@ -158,60 +190,103 @@ def plex_music_path(
     return f"{artist_name}/{album_folder}/{filename}"
 
 
+# ---------------------------------------------------------------------------
+# Extração de subpath a partir do título do torrent
+# ---------------------------------------------------------------------------
+
+def _detect_edition(title: str) -> str | None:
+    """Detecta edição do filme no título (Director's Cut, Extended, Remastered, etc.)."""
+    m = re.search(
+        r"\b(Director'?s?\s*Cut|Extended(?:\s+Edition)?|Remastered|Unrated|Theatrical"
+        r"|Ultimate(?:\s+Edition)?|Special\s+Edition|Criterion|IMAX)\b",
+        title, re.I,
+    )
+    return m.group(1).strip() if m else None
+
+
 def extract_movie_subpath(title: str) -> str:
-    """
-    Extrai subpath para filme: 'Movie Name (Year)' ou 'Movies/Movie Name (Year)'.
-    Padrões: "Name (YYYY)", "Name YYYY", "Name - YYYY"; remove tags [1080p], etc.
-    """
+    """Extrai subpath para filme usando guessit com fallback regex e LLM."""
     if not title or not title.strip():
         return "Unknown"
-    t = title.strip()
-    # Remover tags comuns no final [1080p], [x265], [BluRay], etc.
-    t = re.sub(r"\s*\[[^\]]*\]\s*$", "", t)
-    # Ano entre parênteses: "Movie Name (2020)"
-    m = re.search(r"^(.+?)\s*\((\d{4})\)\s*$", t)
+
+    g = _guessit_parse(title)
+    if g and g.get("type") in ("movie", None) and g.get("title"):
+        name = g["title"]
+        year = g.get("year")
+        if year:
+            return _sanitize(f"{name} ({year})")
+        return _sanitize(name)
+
+    t = _normalize_torrent_title(title)
+    t = re.sub(r"\s*\[[^\]]*\]\s*", " ", t).strip()
+    m = re.search(r"^(.+?)\s*\((\d{4})\)", t)
     if m:
-        name, year = m.group(1).strip(), m.group(2)
-        return _sanitize(f"{name} ({year})")
-    # Ano separado: "Movie Name 2020" ou "Movie Name - 2020"
-    m = re.search(r"^(.+?)\s+[-.]?\s*(\d{4})\s*$", t)
+        return _sanitize(f"{m.group(1).strip()} ({m.group(2)})")
+    m = re.search(r"^(.+?)\s+[-.]?\s*(\d{4})\b", t)
     if m:
-        name, year = m.group(1).strip(), m.group(2)
-        return _sanitize(f"{name} ({year})")
+        return _sanitize(f"{m.group(1).strip()} ({m.group(2)})")
+
+    try:
+        from .ai.llm_organize import llm_parse_torrent_name
+        parsed = llm_parse_torrent_name(title)
+        if parsed and parsed.get("title"):
+            name = parsed["title"]
+            year = parsed.get("year")
+            if year:
+                return _sanitize(f"{name} ({year})")
+            return _sanitize(name)
+    except Exception:
+        pass
+
     return _sanitize(t[:60])
 
 
 def extract_tv_subpath(title: str) -> str:
-    """
-    Extrai subpath para série: 'Show Name/Season 01' ou 'Show Name/Season 01/S01E05 - Episode'.
-    Detecta S01, Season 1, S01E05, etc.
-    """
+    """Extrai subpath para série usando guessit com fallback regex e LLM. Suporta SxxExx, 1x01, etc."""
     if not title or not title.strip():
         return "Unknown"
-    t = title.strip()
-    # Remover tags no final [1080p], etc.
-    t = re.sub(r"\s*\[[^\]]*\]\s*$", "", t)
-    # S01E05 ou S1E5
-    m = re.search(r"^(.+?)[\s.-]+(S\d{1,2})E(\d{1,2})", t, re.I)
+
+    g = _guessit_parse(title)
+    if g and g.get("type") == "episode" and g.get("title"):
+        show = _sanitize(g["title"])
+        season = g.get("season", 1)
+        return f"{show}/Season {str(season).zfill(2)}"
+
+    t = _normalize_torrent_title(title)
+    t = re.sub(r"\s*\[[^\]]*\]\s*", " ", t).strip()
+
+    m = re.search(r"^(.+?)[\s.-]+S(\d{1,2})E\d{1,3}", t, re.I)
     if m:
         show = _sanitize(m.group(1).strip())
-        s_num = m.group(2).upper()
-        if len(s_num) == 2:  # S1 -> S01
-            s_num = "S" + s_num[1:].zfill(2)
-        season_folder = f"Season {s_num[1:].lstrip('0') or '1'}"
-        return f"{show}/{season_folder}"
-    # Season 1 ou Season 01
+        season = int(m.group(2))
+        return f"{show}/Season {str(season).zfill(2)}"
+    m = re.search(r"^(.+?)[\s.-]+(\d{1,2})x(\d{2,3})", t, re.I)
+    if m:
+        show = _sanitize(m.group(1).strip())
+        season = int(m.group(2))
+        return f"{show}/Season {str(season).zfill(2)}"
     m = re.search(r"^(.+?)[\s.-]+Season\s*(\d{1,2})", t, re.I)
     if m:
         show = _sanitize(m.group(1).strip())
-        season_num = m.group(2).lstrip("0") or "1"
-        return f"{show}/Season {season_num}"
-    # S01 ou S1 sozinho
-    m = re.search(r"^(.+?)[\s.-]+(S\d{1,2})\b", t, re.I)
+        season = int(m.group(2))
+        return f"{show}/Season {str(season).zfill(2)}"
+    m = re.search(r"^(.+?)[\s.-]+(S(\d{1,2}))\b", t, re.I)
     if m:
         show = _sanitize(m.group(1).strip())
-        s_num = m.group(2).upper()[1:].lstrip("0") or "1"
-        return f"{show}/Season {s_num}"
+        season = int(m.group(3))
+        return f"{show}/Season {str(season).zfill(2)}"
+
+    try:
+        from .ai.llm_organize import llm_parse_torrent_name
+        parsed = llm_parse_torrent_name(title)
+        if parsed:
+            show = parsed.get("show") or parsed.get("title")
+            season = parsed.get("season", 1)
+            if show:
+                return f"{_sanitize(show)}/Season {str(season).zfill(2)}"
+    except Exception:
+        pass
+
     return _sanitize(t[:50])
 
 
@@ -227,26 +302,40 @@ def extract_subpath_by_content_type(title: str, content_type: ContentType) -> st
 def extract_artist_album_subpath(title: str) -> str:
     """
     Extrai um subpath 'Artist/Album' do título do torrent.
-    Títulos típicos: "Artist - Album (Year) [FLAC]", "Artist – Album", "Artist - Album".
-    Retorna path sanitizado; se não conseguir extrair, usa os primeiros caracteres do título.
+    Normaliza pontos/underscores, trata prefixos [Label], e separadores variados.
     """
     if not title or not title.strip():
         return "Unknown"
-    t = title.strip()
-    # Separadores comuns: " - ", " – ", " — "
-    for sep in [" - ", " – ", " — "]:
+    t = _normalize_torrent_title(title)
+    # Remover prefixos de label: [Label] ou {Label}
+    t = re.sub(r"^\s*[\[\{][^\]\}]*[\]\}]\s*", "", t).strip()
+    # Remover sufixos comuns: [FLAC], (2020), {Web}, etc.
+    t = re.sub(r"\s*[\[\{][^\]\}]*[\]\}]\s*$", "", t).strip()
+    t = re.sub(r"\s*\(\d{4}\)\s*$", "", t).strip()
+
+    for sep in [" - ", " – ", " — ", " − "]:
         if sep in t:
             parts = t.split(sep, 1)
             artist = _sanitize(parts[0].strip()) if parts else ""
             rest = parts[1].strip() if len(parts) > 1 else ""
-            # Remover sufixos comuns [FLAC], (Year), etc.
-            rest = re.sub(r"\s*\[[^\]]*\]\s*$", "", rest)
-            rest = re.sub(r"\s*\(\d{4}\)\s*$", "", rest)
+            rest = re.sub(r"\s*[\[\{][^\]\}]*[\]\}]\s*$", "", rest).strip()
+            rest = re.sub(r"\s*\(\d{4}\)\s*$", "", rest).strip()
             album = _sanitize(rest) if rest else _sanitize(t[:50])
             if artist and album:
                 return f"{artist}/{album}"
-            if artist:
-                return artist
+            return artist or album or _sanitize(t[:50])
+
+    try:
+        from .ai.llm_organize import llm_parse_torrent_name
+        parsed = llm_parse_torrent_name(title)
+        if parsed:
+            artist = parsed.get("artist")
+            album = parsed.get("album") or parsed.get("title")
+            if artist and album:
+                return f"{_sanitize(artist)}/{_sanitize(album)}"
             if album:
-                return album
+                return _sanitize(album)
+    except Exception:
+        pass
+
     return _sanitize(t[:50])

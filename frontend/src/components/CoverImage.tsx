@@ -1,7 +1,8 @@
 import { useState, useEffect, memo } from 'react';
+import { getCover } from '../api/cover';
 import './CoverImage.css';
 
-type ContentType = 'music' | 'movies' | 'tv';
+type ContentType = 'music' | 'movies' | 'tv' | 'concerts';
 
 interface CoverImageProps {
   contentType: ContentType;
@@ -21,15 +22,19 @@ export const CoverImage = memo(function CoverImage({ contentType, title, size = 
   useEffect(() => {
     if (!title.trim() && downloadId == null && importId == null) return;
     let cancelled = false;
-    const params = new URLSearchParams({ content_type: contentType, title: title.trim() || '', size: apiSize });
-    if (downloadId != null) params.set('download_id', String(downloadId));
-    if (importId != null) params.set('import_id', String(importId));
-    fetch(`/api/cover?${params}`)
-      .then((r) => (r.ok ? r.json() : { url: null }))
+    getCover({
+      content_type: contentType,
+      title: title.trim() || '',
+      size: apiSize,
+      ...(downloadId != null && { download_id: downloadId }),
+      ...(importId != null && { import_id: importId }),
+    })
       .then((data) => {
         if (!cancelled && data?.url) setUrl(data.url);
       })
-      .catch(() => {})
+      .catch((err) => {
+        if (import.meta.env.DEV) console.warn('[CoverImage] fetch failed', err);
+      })
       .finally(() => {
         if (!cancelled) setLoaded(true);
       });

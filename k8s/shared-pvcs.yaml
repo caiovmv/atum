@@ -1,0 +1,52 @@
+# PVCs compartilhados entre múltiplos pods (api, runner, sync-daemon, enrichment-daemon)
+# api_covers: ReadWriteMany — montado simultaneamente em api, runner, sync-daemon, enrichment-daemon
+# library-music e library-videos: ajuste o storageClassName para NFS ou similar (ReadWriteMany)
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: api-covers
+  namespace: atum
+  labels:
+    app.kubernetes.io/name: atum
+    app.kubernetes.io/component: shared-storage
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 5Gi
+  # Requer StorageClass com suporte a ReadWriteMany (ex.: NFS, CephFS, EFS)
+  # storageClassName: nfs-client
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: library-music
+  namespace: atum
+  labels:
+    app.kubernetes.io/name: atum
+    app.kubernetes.io/component: shared-storage
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 100Gi
+  # storageClassName: nfs-client
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: library-videos
+  namespace: atum
+  labels:
+    app.kubernetes.io/name: atum
+    app.kubernetes.io/component: shared-storage
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 500Gi
+  # storageClassName: nfs-client

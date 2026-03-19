@@ -18,10 +18,10 @@ def add_term(term: str, db_path=None) -> int:
     return _pg_add(term.strip(), _database_url()) if (term or "").strip() else 0
 
 
-def list_all(db_path=None) -> list[dict]:
+def list_all(db_path=None, *, limit: int | None = None, offset: int | None = None) -> list[dict]:
     """Lista todos os termos da wishlist (ordem de inserção). db_path ignorado."""
     from .wishlist_repository_postgres import list_all as _pg_list
-    return _pg_list(_database_url())
+    return _pg_list(_database_url(), limit=limit, offset=offset)
 
 
 def delete_by_id(wishlist_id: int, db_path=None) -> bool:

@@ -8,7 +8,7 @@
 }
 
 .atum-feeds-desc {
-  color: var(--atum-muted, #888);
+  color: var(--atum-muted);
   margin-bottom: 1.5rem;
 }
 
@@ -35,10 +35,10 @@
   flex: 1;
   min-width: 200px;
   padding: 0.5rem;
-  border: 1px solid var(--atum-border, #333);
+  border: 1px solid var(--atum-border);
   border-radius: 4px;
-  background: var(--atum-bg-input, #222);
-  color: var(--atum-fg, #eee);
+  background: var(--atum-bg-input);
+  color: var(--atum-fg);
 }
 
 .atum-feeds-pills {
@@ -63,10 +63,17 @@
   background: var(--atum-card-hover);
 }
 
+.atum-feeds-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+}
+
 .atum-feeds-pill--active {
   background: var(--atum-accent);
   border-color: var(--atum-accent);
-  color: #000;
+  color: var(--atum-bg);
 }
 
 .atum-feeds-pill:focus-visible {
@@ -75,12 +82,12 @@
 }
 
 .atum-feeds-error {
-  color: var(--atum-error, #e74c3c);
+  color: var(--atum-error);
   margin-top: 0.5rem;
 }
 
 .atum-feeds-empty {
-  color: var(--atum-muted, #888);
+  color: var(--atum-muted);
 }
 
 .atum-feeds-ul {
@@ -95,7 +102,7 @@
   justify-content: space-between;
   gap: 0.75rem;
   padding: 0.5rem 0;
-  border-bottom: 1px solid var(--atum-border, #333);
+  border-bottom: 1px solid var(--atum-border);
 }
 
 .atum-feeds-item-info {
@@ -105,7 +112,7 @@
 
 .atum-feeds-item-url {
   word-break: break-all;
-  color: var(--atum-muted, #888);
+  color: var(--atum-muted);
   font-size: 0.9rem;
 }
 
@@ -121,7 +128,7 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 0;
-  border-bottom: 1px solid var(--atum-border, #333);
+  border-bottom: 1px solid var(--atum-border);
 }
 
 .atum-feeds-pending-item input {
@@ -136,41 +143,10 @@
 
 .atum-feeds-pending-quality {
   font-size: 0.8rem;
-  color: var(--atum-muted, #888);
+  color: var(--atum-muted);
 }
 
-.atum-btn {
-  padding: 0.5rem 0.75rem;
-  border-radius: 4px;
-  border: 1px solid var(--atum-border, #333);
-  background: var(--atum-card);
-  color: var(--atum-fg, #eee);
-  cursor: pointer;
-  font-size: 0.9rem;
-}
-
-.atum-btn:hover {
-  background: var(--atum-hover, #333);
-}
-
-.atum-btn-primary {
-  background: var(--atum-primary, #3498db);
-  border-color: var(--atum-primary, #3498db);
-}
-
-.atum-btn-primary:hover {
-  filter: brightness(1.1);
-}
-
-.atum-btn-small {
-  font-size: 0.8rem;
-  padding: 0.35rem 0.5rem;
-}
-
-.atum-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
+/* atum-btn centralizado em index.css */
 
 .atum-toast {
   position: fixed;
@@ -181,7 +157,114 @@
   background: var(--atum-card);
   border: 1px solid var(--atum-border);
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-md);
   z-index: 1000;
   max-width: 90%;
+}
+
+@media (max-width: 599px) {
+  .atum-feeds {
+    padding: 0.5rem;
+  }
+  .atum-feeds-title {
+    font-size: 1.25rem;
+  }
+  .atum-feeds-add-form {
+    flex-direction: column;
+  }
+  .atum-feeds-input {
+    min-width: 0;
+    width: 100%;
+  }
+  .atum-feeds-add-form button {
+    width: 100%;
+  }
+  .atum-feeds-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.4rem;
+  }
+  .atum-feeds-pending-item {
+    flex-wrap: wrap;
+  }
+}
+
+.atum-feeds-pending-controls {
+  margin-bottom: 0.5rem;
+}
+
+.atum-feeds-pending-organize {
+  margin-left: 1rem;
+}
+
+.atum-feeds-pending-submit {
+  margin-top: 0.75rem;
+}
+
+/* AI Suggestions */
+.atum-feeds-ai {
+  margin-bottom: 1.5rem;
+}
+.atum-feeds-ai-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+.atum-feeds-ai-header .atum-feeds-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+}
+.atum-feeds-ai-loading,
+.atum-feeds-ai-empty {
+  color: var(--atum-text-muted);
+  font-size: 0.85rem;
+  padding: 1rem 0;
+}
+.atum-feeds-ai-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.atum-feeds-ai-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid var(--atum-border);
+  border-radius: 8px;
+  background: var(--atum-surface);
+}
+.atum-feeds-ai-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1;
+}
+.atum-feeds-ai-card-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.atum-feeds-ai-card-url {
+  font-size: 0.75rem;
+  color: var(--atum-accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.atum-feeds-ai-card-reason {
+  font-size: 0.78rem;
+  color: var(--atum-text-muted);
+}
+.atum-feeds-ai-card-type {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--atum-text-muted);
+  font-weight: 600;
 }

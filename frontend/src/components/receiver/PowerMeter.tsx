@@ -5,10 +5,10 @@ const SCALE_MARKS = [-60, -48, -36, -24, -18, -12, -6, -3, 0];
 const SMOOTH = 0.2;
 const PEAK_HOLD_DECAY = 1500;
 
-const VFD = '#00e5c8';
-const VFD_DIM = 'rgba(0, 229, 200, 0.15)';
-const VFD_SCALE = 'rgba(0, 229, 200, 0.5)';
-const VFD_TEXT = 'rgba(0, 229, 200, 0.6)';
+const VFD = 'var(--atum-accent)';
+const VFD_DIM = 'var(--atum-accent-dim)';
+const VFD_SCALE = 'var(--atum-accent-scale)';
+const VFD_TEXT = 'var(--atum-accent-text)';
 
 
 interface PowerMeterProps {

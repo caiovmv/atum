@@ -1,0 +1,63 @@
+.atum-library-ai {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.atum-library-ai-hint {
+  color: var(--atum-muted);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.atum-library-ai-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.atum-library-ai-form input {
+  padding: 0.5rem 0.75rem;
+  font-size: 1rem;
+  border: 1px solid var(--atum-border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--atum-input-bg, var(--atum-bg));
+  color: var(--atum-text);
+}
+
+.atum-library-ai-form input:focus {
+  outline: none;
+  border-color: var(--atum-accent);
+}
+
+.atum-library-ai-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.atum-library-ai-suggestions-label {
+  font-size: 0.85rem;
+  color: var(--atum-muted);
+  margin-right: 0.25rem;
+}
+
+.atum-library-ai-chip {
+  font-size: 0.85rem;
+  padding: 0.35rem 0.6rem;
+}
+
+.atum-library-ai-error {
+  font-size: 0.9rem;
+  color: var(--atum-error, #dc3545);
+  margin: 0;
+}
+
+.atum-library-ai-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  margin-top: 0.5rem;
+}
