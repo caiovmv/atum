@@ -1,24 +1,18 @@
 # Dashboard do Traefik acessível em https://traefik.loombeat.com
 # Protegido por HTTP Basic Auth.
+# Cloudflare Tunnel faz o SSL — Traefik recebe HTTP puro na porta 80.
 #
-# PASSO 1 — Gerar o hash htpasswd e criar o Secret no cluster:
+# PASSO 1 — Criar o Secret com as credenciais (PowerShell):
 #
-#   # Substitua USER e PASSWORD pelos seus valores
-#   kubectl create secret generic traefik-dashboard-auth \
-#     --from-literal=users="$(htpasswd -nb USER PASSWORD)" \
-#     -n atum
-#
-#   # Alternativa sem htpasswd instalado (usa openssl):
-#   kubectl create secret generic traefik-dashboard-auth \
-#     --from-literal=users="USER:$(openssl passwd -apr1 PASSWORD)" \
-#     -n atum
+#   $USER = "admin"
+#   $PASSWORD = "sua-senha-aqui"
+#   $HASH = kubectl run htpasswd-gen --rm -i --restart=Never --image=httpd:alpine -- htpasswd -nb $USER $PASSWORD 2>$null
+#   kubectl create secret generic traefik-dashboard-auth --from-literal=users="$HASH" -n atum
 #
 # PASSO 2 — Aplicar este arquivo:
-#
 #   kubectl apply -f k8s/traefik-dashboard.yaml
 #
-# PASSO 3 — Garantir que traefik-letsencrypt.yaml já foi aplicado
-#   (necessário para o certResolver letsencrypt e api.dashboard: true).
+# PASSO 3 — Garantir que traefik-letsencrypt.yaml foi aplicado (api.dashboard: true).
 ---
 # Middleware: BasicAuth lendo as credenciais do Secret
 apiVersion: traefik.io/v1alpha1
@@ -30,31 +24,11 @@ spec:
   basicAuth:
     secret: traefik-dashboard-auth
 ---
-# IngressRoute HTTPS para o dashboard
+# IngressRoute para o dashboard via Cloudflare Tunnel (HTTP na porta 80)
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
   name: traefik-dashboard
-  namespace: atum
-spec:
-  entryPoints:
-    - websecure
-  routes:
-    - match: Host(`traefik.loombeat.com`)
-      kind: Rule
-      middlewares:
-        - name: traefik-dashboard-auth
-      services:
-        - name: api@internal
-          kind: TraefikService
-  tls:
-    certResolver: letsencrypt
----
-# Redirect HTTP → HTTPS também para o dashboard
-apiVersion: traefik.io/v1alpha1
-kind: IngressRoute
-metadata:
-  name: traefik-dashboard-http
   namespace: atum
 spec:
   entryPoints:
@@ -63,7 +37,7 @@ spec:
     - match: Host(`traefik.loombeat.com`)
       kind: Rule
       middlewares:
-        - name: redirect-https
+        - name: traefik-dashboard-auth
       services:
-        - name: frontend
-          port: 80
+        - name: api@internal
+          kind: TraefikService

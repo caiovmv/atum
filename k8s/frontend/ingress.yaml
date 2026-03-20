@@ -1,50 +1,19 @@
-# Traefik IngressRoute para atum.loombeat.com
+# Traefik IngressRoute para atum.pipenodes.com
 #
-# Traefik v3 (traefik.io/v1alpha1) — K3s neste cluster usa Traefik v3
+# Cloudflare Tunnel faz o SSL offloading — Traefik recebe HTTP puro na porta 80.
+# Não é necessário Let's Encrypt nem redirect HTTPS neste lado.
 ---
-# Middleware: redireciona HTTP → HTTPS permanentemente
-apiVersion: traefik.io/v1alpha1
-kind: Middleware
-metadata:
-  name: redirect-https
-  namespace: atum
-spec:
-  redirectScheme:
-    scheme: https
-    permanent: true
----
-# IngressRoute HTTP: apenas redireciona para HTTPS
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
-  name: frontend-http
+  name: frontend
   namespace: atum
 spec:
   entryPoints:
     - web
   routes:
-    - match: Host(`atum.loombeat.com`)
-      kind: Rule
-      middlewares:
-        - name: redirect-https
-      services:
-        - name: frontend
-          port: 80
----
-# IngressRoute HTTPS: serve o frontend com TLS via Let's Encrypt
-apiVersion: traefik.io/v1alpha1
-kind: IngressRoute
-metadata:
-  name: frontend-https
-  namespace: atum
-spec:
-  entryPoints:
-    - websecure
-  routes:
-    - match: Host(`atum.loombeat.com`)
+    - match: Host(`atum.pipenodes.com`)
       kind: Rule
       services:
         - name: frontend
           port: 80
-  tls:
-    certResolver: letsencrypt
