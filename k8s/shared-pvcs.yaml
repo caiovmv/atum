@@ -18,10 +18,13 @@ spec:
     requests:
       storage: 5Gi
 ---
+# PVC único para toda a biblioteca de mídia.
+# Subdiretórios: music/, videos/, series/, concerts/ (e futuros).
+# Pods montam subpaths específicos via volumeMounts[].subPath.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: library-music
+  name: library
   namespace: atum
   labels:
     app.kubernetes.io/name: atum
@@ -31,19 +34,4 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 100Gi
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: library-videos
-  namespace: atum
-  labels:
-    app.kubernetes.io/name: atum
-    app.kubernetes.io/component: shared-storage
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 500Gi
+      storage: 1Ti

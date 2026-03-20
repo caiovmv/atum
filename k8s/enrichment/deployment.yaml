@@ -57,10 +57,18 @@ spec:
           volumeMounts:
             - name: covers
               mountPath: /app/covers
-            - name: library-music
+            - name: library
               mountPath: /library/music
-            - name: library-videos
+              subPath: music
+            - name: library
               mountPath: /library/videos
+              subPath: videos
+            - name: library
+              mountPath: /library/series
+              subPath: series
+            - name: library
+              mountPath: /library/concerts
+              subPath: concerts
           securityContext:
             capabilities:
               add: ["SYS_PTRACE"]
@@ -68,9 +76,6 @@ spec:
         - name: covers
           persistentVolumeClaim:
             claimName: api-covers
-        - name: library-music
+        - name: library
           persistentVolumeClaim:
-            claimName: library-music
-        - name: library-videos
-          persistentVolumeClaim:
-            claimName: library-videos
+            claimName: library
