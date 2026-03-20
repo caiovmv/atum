@@ -27,8 +27,8 @@ data:
   # URLs internas de serviços
   DOWNLOAD_RUNNER_URL: http://runner.atum.svc.cluster.local:9092
 
-  # CORS
-  CORS_ORIGINS: "*"
+  # CORS — domínio real necessário para que allow_credentials=True funcione com BasicAuth
+  CORS_ORIGINS: "https://atum.loombeat.com"
 
   # Tuning de workers
   SYNC_MAX_WORKERS: "8"

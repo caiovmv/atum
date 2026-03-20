@@ -35,6 +35,9 @@ spec:
       web:
         expose:
           default: true
+        # Desabilitar redirect global web→websecure — Cloudflare Tunnel já entrega HTTP
+        # e o redirect causaria loop infinito (Cloudflare segue o redirect de volta ao túnel)
+        redirectTo: {}
       websecure:
         expose:
           default: true
