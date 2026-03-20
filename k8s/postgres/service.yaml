@@ -13,4 +13,3 @@ spec:
     - port: 5432
       targetPort: 5432
       name: postgres
-  clusterIP: None  # Headless — necessário para StatefulSet

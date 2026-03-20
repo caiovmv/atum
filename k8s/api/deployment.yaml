@@ -19,6 +19,17 @@ spec:
     spec:
       securityContext:
         runAsUser: 0  # entrypoint-api.sh requer root para chown; ajustar se possível
+      initContainers:
+        - name: wait-postgres
+          image: postgres:16-alpine
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h postgres.atum.svc.cluster.local -p 5432; do
+                echo "Aguardando Postgres..."
+                sleep 2
+              done
       containers:
         - name: api
           image: ghcr.io/caiovmv/atum-api:latest
