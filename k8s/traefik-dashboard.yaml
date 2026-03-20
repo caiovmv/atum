@@ -21,7 +21,7 @@
 #   (necessário para o certResolver letsencrypt e api.dashboard: true).
 ---
 # Middleware: BasicAuth lendo as credenciais do Secret
-apiVersion: traefik.containo.us/v1alpha1
+apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: traefik-dashboard-auth
@@ -31,7 +31,7 @@ spec:
     secret: traefik-dashboard-auth
 ---
 # IngressRoute HTTPS para o dashboard
-apiVersion: traefik.containo.us/v1alpha1
+apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
   name: traefik-dashboard
@@ -51,7 +51,7 @@ spec:
     certResolver: letsencrypt
 ---
 # Redirect HTTP → HTTPS também para o dashboard
-apiVersion: traefik.containo.us/v1alpha1
+apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
   name: traefik-dashboard-http
