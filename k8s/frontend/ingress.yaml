@@ -1,5 +1,11 @@
+# Traefik IngressRoute para atum.loombeat.com
+#
+# Compatível com Traefik v2 (K3s stable usa traefik.containo.us/v1alpha1).
+# Se o seu K3s usar Traefik v3, troque o apiVersion para traefik.io/v1alpha1.
+# Verificar: kubectl get crd | grep traefik
+---
 # Middleware: redireciona HTTP → HTTPS permanentemente
-apiVersion: traefik.io/v1alpha1
+apiVersion: traefik.containo.us/v1alpha1
 kind: Middleware
 metadata:
   name: redirect-https
@@ -10,7 +16,7 @@ spec:
     permanent: true
 ---
 # IngressRoute HTTP: apenas redireciona para HTTPS
-apiVersion: traefik.io/v1alpha1
+apiVersion: traefik.containo.us/v1alpha1
 kind: IngressRoute
 metadata:
   name: frontend-http
@@ -28,7 +34,7 @@ spec:
           port: 80
 ---
 # IngressRoute HTTPS: serve o frontend com TLS via Let's Encrypt
-apiVersion: traefik.io/v1alpha1
+apiVersion: traefik.containo.us/v1alpha1
 kind: IngressRoute
 metadata:
   name: frontend-https
