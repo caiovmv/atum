@@ -1,6 +1,7 @@
 # PVCs compartilhados entre múltiplos pods (api, runner, sync-daemon, enrichment-daemon)
-# api_covers: ReadWriteMany — montado simultaneamente em api, runner, sync-daemon, enrichment-daemon
-# library-music e library-videos: ajuste o storageClassName para NFS ou similar (ReadWriteMany)
+# K3s single-node: ReadWriteOnce é suficiente — múltiplos pods no mesmo nó podem
+# montar o mesmo PVC ReadWriteOnce simultaneamente.
+# Para cluster multi-nó: trocar para ReadWriteMany e configurar NFS/Longhorn/CephFS.
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -12,12 +13,10 @@ metadata:
     app.kubernetes.io/component: shared-storage
 spec:
   accessModes:
-    - ReadWriteMany
+    - ReadWriteOnce
   resources:
     requests:
       storage: 5Gi
-  # Requer StorageClass com suporte a ReadWriteMany (ex.: NFS, CephFS, EFS)
-  # storageClassName: nfs-client
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -29,11 +28,10 @@ metadata:
     app.kubernetes.io/component: shared-storage
 spec:
   accessModes:
-    - ReadWriteMany
+    - ReadWriteOnce
   resources:
     requests:
       storage: 100Gi
-  # storageClassName: nfs-client
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -45,8 +43,7 @@ metadata:
     app.kubernetes.io/component: shared-storage
 spec:
   accessModes:
-    - ReadWriteMany
+    - ReadWriteOnce
   resources:
     requests:
       storage: 500Gi
-  # storageClassName: nfs-client
