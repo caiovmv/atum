@@ -184,16 +184,8 @@ def _split_sql(sql: str) -> list[str]:
 
 
 def _ensure_schema_postgres(conn) -> None:
-    """Aplica schema principal e migrations pendentes (versionamento por scripts/migrations/)."""
+    """Aplica todas as migrations pendentes (incluindo 000_initial_schema como base)."""
     base = Path(__file__).resolve().parent.parent.parent / "scripts"
-    schema_path = base / "schema_postgres.sql"
-    if schema_path.is_file():
-        schema_sql = schema_path.read_text(encoding="utf-8")
-        with conn.cursor() as cur:
-            for stmt in _split_sql(schema_sql):
-                stmt = _strip_leading_comments(stmt.strip())
-                if stmt:
-                    cur.execute(stmt)
     migrations_dir = base / "migrations"
     if migrations_dir.is_dir():
         _run_pending_migrations(conn, migrations_dir)
