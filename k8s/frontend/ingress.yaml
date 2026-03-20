@@ -1,4 +1,4 @@
-# Traefik IngressRoute para atum.pipenodes.com
+# Traefik IngressRoute para atum.loombeat.com
 #
 # Cloudflare Tunnel faz o SSL offloading — Traefik recebe HTTP puro na porta 80.
 # Não é necessário Let's Encrypt nem redirect HTTPS neste lado.
@@ -12,7 +12,7 @@ spec:
   entryPoints:
     - web
   routes:
-    - match: Host(`atum.pipenodes.com`)
+    - match: Host(`atum.loombeat.com`)
       kind: Rule
       services:
         - name: frontend
