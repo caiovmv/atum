@@ -24,6 +24,7 @@ resources:
   - runner/service.yaml
 
   # Frontend
+  - frontend/nginx-k8s-configmap.yaml
   - frontend/deployment.yaml
   - frontend/service.yaml
   - frontend/ingress.yaml

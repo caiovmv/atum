@@ -1,0 +1,34 @@
+# Configuração do Traefik para Let's Encrypt via K3s HelmChartConfig.
+#
+# APLICAR MANUALMENTE UMA VEZ NO CLUSTER (não está no kustomization.yaml
+# porque este recurso fica em kube-system, fora do namespace atum):
+#
+#   kubectl apply -f k8s/traefik-letsencrypt.yaml
+#
+# Após aplicar, o K3s atualiza automaticamente o Traefik com as novas opções.
+# O arquivo acme.json (certificados) é persistido no volume do Traefik.
+#
+# Pré-requisito: atum.loombeat.com deve resolver para o IP do nó K3s
+# e a porta 443 deve estar acessível pela internet (necessário para TLS challenge).
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    additionalArguments:
+      - "--certificatesresolvers.letsencrypt.acme.email=admin@loombeat.com"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/data/acme.json"
+      - "--certificatesresolvers.letsencrypt.acme.tlschallenge=true"
+    persistence:
+      enabled: true
+      size: 128Mi
+    # Garante que as portas 80 e 443 estejam expostas
+    ports:
+      web:
+        expose:
+          default: true
+      websecure:
+        expose:
+          default: true

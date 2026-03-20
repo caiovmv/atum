@@ -23,8 +23,6 @@ spec:
           ports:
             - containerPort: 80
               name: http
-            - containerPort: 443
-              name: https
           env:
             - name: BASIC_AUTH_USER
               valueFrom:
@@ -60,8 +58,10 @@ spec:
               cpu: 200m
               memory: 128Mi
           volumeMounts:
-            - name: nginx-certs
-              mountPath: /etc/nginx/ssl
+            - name: nginx-config
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: default.conf
       volumes:
-        - name: nginx-certs
-          emptyDir: {}  # Substitua por um PVC ou Secret TLS se usar cert-manager
+        - name: nginx-config
+          configMap:
+            name: frontend-nginx-config
