@@ -13,4 +13,3 @@ spec:
     - port: 6379
       targetPort: 6379
       name: redis
-  clusterIP: None  # Headless — necessário para StatefulSet

@@ -19,6 +19,27 @@ spec:
     spec:
       # hostNetwork permite que as portas BitTorrent sejam acessíveis diretamente do nó.
       # Alternativa: usar Service LoadBalancer (ver service.yaml) sem hostNetwork.
+      initContainers:
+        - name: wait-postgres
+          image: postgres:16-alpine
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h postgres.atum.svc.cluster.local -p 5432; do
+                echo "Aguardando Postgres..."
+                sleep 2
+              done
+        - name: wait-redis
+          image: redis:7-alpine
+          command:
+            - sh
+            - -c
+            - |
+              until redis-cli -h redis.atum.svc.cluster.local ping | grep -q PONG; do
+                echo "Aguardando Redis..."
+                sleep 2
+              done
       containers:
         - name: runner
           image: ghcr.io/caiovmv/atum-runner:latest

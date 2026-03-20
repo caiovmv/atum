@@ -28,6 +28,16 @@ spec:
                 echo "Aguardando Postgres..."
                 sleep 2
               done
+        - name: wait-redis
+          image: redis:7-alpine
+          command:
+            - sh
+            - -c
+            - |
+              until redis-cli -h redis.atum.svc.cluster.local ping | grep -q PONG; do
+                echo "Aguardando Redis..."
+                sleep 2
+              done
       containers:
         - name: feed-daemon
           image: ghcr.io/caiovmv/atum-api:latest
