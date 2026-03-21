@@ -42,6 +42,16 @@ export function createAudioEngine(audioElement: HTMLAudioElement): AudioEngine {
   if (!audioElement.crossOrigin) audioElement.crossOrigin = 'anonymous';
 
   const ctx = new AudioContext();
+
+  // Auto-resume quando o dispositivo de áudio é restaurado após suspend/interrupt.
+  // Ocorre ao trocar output (fones), ao sistema retornar de sleep, ou após
+  // "AudioContext encountered an error from the audio device or the WebAudio renderer".
+  ctx.onstatechange = () => {
+    if (ctx.state === 'suspended' || ctx.state === 'interrupted' as AudioContextState) {
+      ctx.resume().catch(() => {/* best-effort */});
+    }
+  };
+
   const source = ctx.createMediaElementSource(audioElement);
 
   const attGain = ctx.createGain();
