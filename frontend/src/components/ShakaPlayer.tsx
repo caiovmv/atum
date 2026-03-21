@@ -54,6 +54,7 @@ export function ShakaPlayer({
 
   const [status, setStatus] = useState<PlayerStatus>('idle');
   const [processingMsg, setProcessingMsg] = useState('Preparando vídeo…');
+  const [progress, setProgress] = useState(0);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
 
   const statusUrl = hlsUrl.replace(/\/master\.m3u8$/, '/status');
@@ -115,6 +116,7 @@ export function ShakaPlayer({
 
       if (data.status === 'ready') {
         clearPoll();
+        setProgress(100);
         await initShaka();
         return;
       }
@@ -125,8 +127,12 @@ export function ShakaPlayer({
       }
 
       // 'pending' | 'processing' — continua aguardando
+      const pct = (data as { progress?: number }).progress ?? 0;
+      setProgress(pct);
       setProcessingMsg(
-        data.status === 'processing' ? 'Transcodificando vídeo…' : 'Preparando vídeo…'
+        data.status === 'processing'
+          ? pct > 0 ? `Transcodificando… ${pct}%` : 'Transcodificando vídeo…'
+          : 'Preparando vídeo…'
       );
       pollTimerRef.current = setTimeout(pollStatus, 3000);
     } catch {
@@ -206,11 +212,40 @@ export function ShakaPlayer({
   }
 
   if (status === 'processing' || status === 'checking') {
+    const retranscodeUrl = hlsUrl.replace(/\/master\.m3u8$/, '');
     return (
       <div className={`shaka-player-wrap ${className ?? ''}`.trim()}>
         <div className="shaka-processing">
           <div className="shaka-processing-spinner" />
           <p>{processingMsg}</p>
+          {progress > 0 && (
+            <div className="shaka-progress-bar" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}>
+              <div className="shaka-progress-fill" style={{ width: `${progress}%` }} />
+            </div>
+          )}
+          <button
+            type="button"
+            className="shaka-retranscode-btn"
+            title="Cancelar e reproduzir via stream direto"
+            onClick={() => useFallback('Usando stream direto.')}
+          >
+            Reproduzir agora (sem HLS)
+          </button>
+          <button
+            type="button"
+            className="shaka-retranscode-btn shaka-retranscode-btn--secondary"
+            title="Forçar re-transcodificação"
+            onClick={async () => {
+              try {
+                await fetch(retranscodeUrl, { method: 'DELETE' });
+              } catch { /* ignorar */ }
+              setStatus('idle');
+              setProgress(0);
+              start();
+            }}
+          >
+            Reiniciar transcodificação
+          </button>
         </div>
       </div>
     );

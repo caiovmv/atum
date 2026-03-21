@@ -20,15 +20,27 @@ from .routers import ai_prompts_router, chat_router, cover_router, downloads_rou
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
+    import logging
+    _log = logging.getLogger(__name__)
+
     from ..config import get_settings
     s = get_settings()
     db_url = (s.database_url or "").strip()
     if not db_url:
-        import logging
-        logging.getLogger(__name__).warning("DATABASE_URL não configurado — operações de banco vão falhar")
+        _log.warning("DATABASE_URL não configurado — operações de banco vão falhar")
     else:
         from ..db_postgres import get_async_pool
         await get_async_pool(db_url)
+
+    # Remove caches HLS parciais de transcodificações interrompidas por restart
+    try:
+        from .hls_service import cleanup_partial_caches
+        removed = cleanup_partial_caches()
+        if removed:
+            _log.info("HLS: %d cache(s) parcial(is) removido(s) na inicialização", removed)
+    except Exception:
+        _log.exception("HLS: erro ao limpar caches parciais na inicialização")
+
     yield
     from ..db_postgres import close_all_async_pools, close_all_pools
     await close_all_async_pools()

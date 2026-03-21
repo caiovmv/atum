@@ -16,7 +16,15 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from pydantic import BaseModel
 
 from ...deps import get_library_import_repo, get_settings
-from ..hls_service import ensure_transcoding, get_job, hls_file_path, is_playable, master_manifest_path
+from ..hls_service import (
+    ensure_transcoding,
+    get_job,
+    hls_file_path,
+    invalidate_all_for_item,
+    invalidate_cache,
+    is_playable,
+    master_manifest_path,
+)
 
 logger = __import__("logging").getLogger(__name__)
 
@@ -1019,3 +1027,28 @@ async def hls_serve(library_id: int, file_index: int, hls_path: str) -> Response
         media_type=media_type,
         headers={"Cache-Control": cache_ctrl},
     )
+
+
+@router.delete("/{library_id}/hls/{file_index}")
+async def hls_delete_file_cache(library_id: int, file_index: int) -> dict:
+    """Invalida e remove o cache HLS de um arquivo específico.
+
+    Útil quando o arquivo fonte foi atualizado ou a transcodificação ficou
+    corrompida. A próxima requisição a master.m3u8 re-transcodifica do zero.
+    """
+    had_cache = invalidate_cache(library_id, file_index)
+    return {
+        "invalidated": had_cache,
+        "library_id": library_id,
+        "file_index": file_index,
+    }
+
+
+@router.delete("/{library_id}/hls")
+async def hls_delete_all_cache(library_id: int) -> dict:
+    """Invalida e remove todo o cache HLS de um item da biblioteca (todos os arquivos).
+
+    Use quando o item foi atualizado ou se o cache ocupar espaço excessivo.
+    """
+    count = invalidate_all_for_item(library_id)
+    return {"invalidated_count": count, "library_id": library_id}

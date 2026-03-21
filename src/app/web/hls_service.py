@@ -16,7 +16,10 @@ Limitações Phase 1:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import re
+import shutil
 from pathlib import Path
 from typing import Literal
 
@@ -32,6 +35,10 @@ VIDEO_EXTENSIONS = {
 }
 
 HLSStatus = Literal["processing", "ready", "error"]
+
+# Regex para extrair timestamp de progresso do stderr do FFmpeg:
+# "frame=  100 fps= 30 ... time=00:01:23.45 ..."
+_FFMPEG_TIME_RE = re.compile(r"time=(\d+):(\d+):(\d+(?:\.\d+)?)")
 
 
 class HLSJob:
@@ -122,6 +129,80 @@ def is_playable(library_id: int, file_index: int) -> bool:
     return False
 
 
+def invalidate_cache(library_id: int, file_index: int) -> bool:
+    """Remove o cache HLS de um arquivo específico e limpa o estado em memória.
+
+    Retorna True se havia cache (foi removido), False se não havia nada.
+    Após a invalidação, a próxima requisição ao master.m3u8 re-transcodifica.
+    """
+    key = _job_key(library_id, file_index)
+    had_cache = key in _jobs or master_manifest_path(library_id, file_index).exists()
+    _jobs.pop(key, None)
+    cache_dir = _cache_dir(library_id, file_index)
+    if cache_dir.exists():
+        shutil.rmtree(cache_dir, ignore_errors=True)
+    return had_cache
+
+
+def invalidate_all_for_item(library_id: int) -> int:
+    """Remove todo o cache HLS de um item da biblioteca (todos os file_index).
+
+    Retorna a quantidade de caches removidos.
+    """
+    cache_base = get_settings().hls_cache_path
+    if not cache_base.exists():
+        return 0
+    removed = 0
+    prefix = f"{library_id}_"
+    for d in list(cache_base.iterdir()):
+        if not d.is_dir() or not d.name.startswith(prefix):
+            continue
+        suffix = d.name[len(prefix):]
+        if not suffix.isdigit():
+            continue
+        key = d.name
+        _jobs.pop(key, None)
+        shutil.rmtree(d, ignore_errors=True)
+        removed += 1
+    return removed
+
+
+def cleanup_partial_caches() -> int:
+    """Remove caches HLS incompletos (transcodificações interrompidas por restart do pod).
+
+    Uma transcodificação é considerada completa quando ao menos uma das playlists
+    de variante contém `#EXT-X-ENDLIST`. Sem essa marcação, os segmentos ficaram
+    parciais e não podem ser reproduzidos integralmente.
+
+    Chamado no lifespan da API para garantir estado limpo após restart.
+    Retorna a quantidade de caches removidos.
+    """
+    cache_base = get_settings().hls_cache_path
+    if not cache_base.exists():
+        return 0
+    removed = 0
+    for job_dir in list(cache_base.iterdir()):
+        if not job_dir.is_dir():
+            continue
+        is_complete = False
+        for v in range(3):
+            pl = job_dir / f"stream_{v}" / "playlist.m3u8"
+            if pl.exists():
+                try:
+                    if "#EXT-X-ENDLIST" in pl.read_text(errors="replace"):
+                        is_complete = True
+                        break
+                except OSError:
+                    pass
+        if not is_complete:
+            logger.info("HLS startup cleanup: removendo cache parcial '%s'", job_dir.name)
+            shutil.rmtree(job_dir, ignore_errors=True)
+            removed += 1
+    if removed:
+        logger.info("HLS startup cleanup: %d cache(s) parcial(is) removido(s)", removed)
+    return removed
+
+
 async def ensure_transcoding(library_id: int, file_index: int) -> HLSJob:
     """Garante que o job de transcodificação esteja em andamento ou concluído.
 
@@ -174,6 +255,31 @@ async def ensure_transcoding(library_id: int, file_index: int) -> HLSJob:
 # ---------------------------------------------------------------------------
 # Internos assíncronos
 # ---------------------------------------------------------------------------
+
+
+async def _get_video_duration(input_path: str) -> float | None:
+    """Retorna a duração do vídeo em segundos via ffprobe. None se não detectado."""
+    cmd = [
+        "ffprobe", "-v", "quiet",
+        "-print_format", "json",
+        "-show_format",
+        input_path,
+    ]
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        stdout, _ = await proc.communicate()
+        if proc.returncode == 0:
+            data = json.loads(stdout.decode(errors="replace"))
+            raw = data.get("format", {}).get("duration")
+            if raw:
+                return float(raw)
+    except Exception:
+        logger.debug("ffprobe: não foi possível obter duração de '%s'", input_path)
+    return None
 
 
 async def _fetch_file_path(library_id: int, file_index: int) -> Path | None:
@@ -241,28 +347,50 @@ async def _run_ffmpeg(input_path: str, cache_dir: Path, job: HLSJob) -> None:
         playlist_pattern,
     ]
 
-    logger.info("HLS: iniciando FFmpeg → %s", cache_dir)
+    # Obtém duração para calcular progresso real (best-effort)
+    duration = await _get_video_duration(input_path)
+
+    logger.info("HLS: iniciando FFmpeg → %s (duração: %.1fs)", cache_dir, duration or 0)
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.PIPE,
         )
-        _, stderr = await proc.communicate()
+
+        # Lê stderr do FFmpeg em chunks e extrai progresso do timestamp `time=`
+        # FFmpeg escreve `\r` (sem newline) para sobrescrever a linha de progresso.
+        stderr_tail: list[bytes] = []
+        assert proc.stderr is not None
+        buf = b""
+        while True:
+            chunk = await proc.stderr.read(512)
+            if not chunk:
+                break
+            buf += chunk
+            # Processa cada "linha" separada por \r ou \n
+            parts = re.split(rb"[\r\n]", buf)
+            buf = parts[-1]  # mantém fragmento incompleto no buffer
+            for part in parts[:-1]:
+                text = part.decode(errors="replace")
+                stderr_tail.append(part[-200:])
+                m = _FFMPEG_TIME_RE.search(text)
+                if m and duration and duration > 0:
+                    h, mn, s = m.groups()
+                    current = int(h) * 3600 + int(mn) * 60 + float(s)
+                    job.progress = min(99, int(current / duration * 100))
+
+        await proc.wait()
+        last_stderr = b"".join(stderr_tail[-20:]).decode(errors="replace")
+
         if proc.returncode != 0:
-            err = (stderr or b"").decode(errors="replace")[-1000:]
-            logger.error("HLS: FFmpeg falhou (rc=%d): %s", proc.returncode, err)
+            logger.error("HLS: FFmpeg falhou (rc=%d): %s", proc.returncode, last_stderr[-500:])
             job.status = "error"
-            job.error = err
+            job.error = last_stderr[-500:] or f"FFmpeg saiu com código {proc.returncode}"
         else:
-            # Verifica se master.m3u8 foi gerado
-            if Path(master_path).exists():
-                job.status = "ready"
-                job.progress = 100
-                logger.info("HLS: pronto → %s", master_path)
-            else:
-                job.status = "error"
-                job.error = "FFmpeg concluiu mas master.m3u8 não foi gerado."
+            job.status = "ready"
+            job.progress = 100
+            logger.info("HLS: pronto → %s", cache_dir)
     except FileNotFoundError:
         job.status = "error"
         job.error = "FFmpeg não encontrado. Instale ffmpeg na imagem."
