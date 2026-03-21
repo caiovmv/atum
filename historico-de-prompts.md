@@ -26,6 +26,21 @@ continuar (after HLS+Shaka implementation — fix lock file and build config)
 
 ### Prompt 5
 
+o que mais falta? / continuar terminar todos os to-dos
+
+**Resultado:** Implementados todos os gaps identificados na análise pós-HLS:
+- `hls_service.py`: `invalidate_cache()`, `invalidate_all_for_item()`, `cleanup_partial_caches()`, `_get_video_duration()` (ffprobe), progress tracking real via parse de stderr do FFmpeg (regex `time=HH:MM:SS`)
+- `library.py`: endpoints `DELETE /api/library/{id}/hls/{file_index}` e `DELETE /api/library/{id}/hls`
+- `app.py`: limpeza automática de caches parciais no lifespan (pod restart recovery)
+- `ShakaPlayer.tsx`: barra de progresso % real, botão "Reproduzir agora (sem HLS)", botão "Reiniciar transcodificação" (chama DELETE + reinicia)
+- `ShakaPlayer.css`: estilos da barra de progresso e dos botões
+- Correção crítica: `hls_serve` agora serve `master.m3u8` assim que primeiro segmento existe (reprodução progressiva ~6-12s após início), não aguarda 100% da transcodificação
+- Cache headers: `.m3u8` recebe `no-store` durante transcodificação, `.ts` recebe `max-age=86400`
+- FFmpeg: `-hls_playlist_type event` para playlist crescer incrementalmente
+- Tags v1.13.1, v1.13.2, v1.13.3 criadas e publicadas
+
+### Prompt 6
+
 Streaming HLS + Shaka Player — Roadmap e Phase 1 (implement the plan)
 
 **Resultado:** Implementada a Phase 1 completa do roadmap HLS:
