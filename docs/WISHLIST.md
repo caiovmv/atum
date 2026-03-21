@@ -26,3 +26,18 @@ Isso exige intervenção manual em casos como remoção de um CRD ou renomeaçã
 **Referências:**
 - https://argo-cd.readthedocs.io
 - https://fluxcd.io
+
+---
+
+## Cloudflare
+
+### Desabilitar QUIC/HTTP3 para rotas SSE
+
+**Contexto:** Os endpoints de Server-Sent Events (`/api/indexers/events`, `/api/downloads/events`, `/api/notifications/events`) falham com `ERR_QUIC_PROTOCOL_ERROR` quando acessados via Cloudflare Tunnel. O protocolo QUIC/HTTP3 encerra conexões de longa duração que não têm o perfil de uma requisição HTTP convencional, quebrando o SSE.
+
+**O que deve ser feito:**
+Criar uma **Transform Rule** ou **Page Rule** no Cloudflare para o domínio `atum.loombeat.com` que force HTTP/2 (desabilitando QUIC) nas rotas que correspondam a `/api/*events*`.
+
+Alternativa mais simples: desabilitar QUIC globalmente para o domínio em **Speed → Optimization → Protocol Optimization → HTTP/3 (QUIC)**.
+
+**Impacto se não corrigido:** Os eventos em tempo real (downloads ativos, notificações, status de indexers) não chegam ao frontend — o app precisa fazer polling manual ou perde reatividade.
