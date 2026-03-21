@@ -18,6 +18,22 @@ acho melhor o pvc library-music e library-videos virarem apenas library e dentro
 
 agora quero adicionar health check nos services. e quero implementar todos os headers de seguranca possiveis
 
+### Prompt 4
+
+Streaming HLS + Shaka Player — Roadmap e Phase 1 (implement the plan)
+
+**Resultado:** Implementada a Phase 1 completa do roadmap HLS:
+- `src/app/web/hls_service.py` (novo): serviço de transcodificação FFmpeg multi-bitrate (360p/720p/1080p) com cache em `/app/hls_cache`, estado de job in-memory com polling
+- `src/app/runner/app.py`: endpoint `GET /downloads/{id}/file-path` para resolver caminho absoluto do arquivo
+- `src/app/config.py`: propriedade `hls_cache_path` (via env `HLS_CACHE_DIR`)
+- `src/app/web/routers/library.py`: endpoints `GET /hls/{idx}/status` e `GET /hls/{idx}/{path:path}` (master.m3u8, playlists e segmentos .ts)
+- `frontend/src/components/ShakaPlayer.tsx` (novo): componente React com polling de status, spinner de processamento e fallback automático para stream progressivo
+- `frontend/src/pages/Player.tsx` e `ReceiverPlayer.tsx`: usam ShakaPlayer para conteúdo de vídeo
+- `frontend/src/hooks/useReceiverPlayer.ts`: expõe `hlsUrl` calculado
+- `k8s/shared-pvcs.yaml`: PVC `hls-cache` (200Gi)
+- `k8s/api/deployment.yaml`: monta PVC em `/app/hls_cache`
+- Tag v1.13.0 criada e publicada
+
 **Resultado:** Implementado em 10 arquivos:
 - Criado docker/security-headers.conf com 7 headers: X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, Referrer-Policy, Permissions-Policy, HSTS e Content-Security-Policy (CSP restrita para SPA React com WebGL e TMDB)
 - Dockerfile.frontend atualizado para copiar o arquivo de headers para a imagem
