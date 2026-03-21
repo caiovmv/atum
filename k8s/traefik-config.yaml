@@ -1,0 +1,28 @@
+# Configuração do Traefik via K3s HelmChartConfig.
+#
+# APLICAR MANUALMENTE UMA VEZ NO CLUSTER (fica em kube-system, fora do namespace atum):
+#
+#   kubectl apply -f k8s/traefik-config.yaml
+#
+# Após aplicar, o K3s reinicia o Traefik automaticamente.
+#
+# Cenário: Cloudflare Tunnel provê SSL para todos os domínios.
+# Traefik escuta apenas na porta 80 (web entrypoint) — sem TLS, sem Let's Encrypt.
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    # Dashboard habilitado — protegido por IngressRoute + BasicAuth (ver traefik-dashboard.yaml)
+    api:
+      dashboard: true
+
+    ports:
+      web:
+        expose:
+          default: true
+        # Desabilitar redirect global web→websecure.
+        # Cloudflare Tunnel entrega HTTP na porta 80 — o redirect causaria loop infinito.
+        redirectTo: {}
