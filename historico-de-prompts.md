@@ -20,6 +20,12 @@ agora quero adicionar health check nos services. e quero implementar todos os he
 
 ### Prompt 4
 
+continuar (after HLS+Shaka implementation — fix lock file and build config)
+
+**Resultado:** Atualizado `package-lock.json` com `shaka-player@4.16.23` (via `npm install`) e `vite.config.ts` com chunk separado `'shaka'` para isolar a lib (~1.5 MB) do bundle vendor. Build corrigido para passar em `npm ci`. Push em `master`.
+
+### Prompt 5
+
 Streaming HLS + Shaka Player — Roadmap e Phase 1 (implement the plan)
 
 **Resultado:** Implementada a Phase 1 completa do roadmap HLS:
