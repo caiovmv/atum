@@ -24,6 +24,7 @@ resources:
   - runner/service.yaml
 
   # Frontend
+  - traefik-security-headers.yaml
   - frontend/nginx-k8s-configmap.yaml
   - frontend/deployment.yaml
   - frontend/service.yaml

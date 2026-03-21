@@ -1,0 +1,27 @@
+# Middleware de Security Headers para o Traefik
+#
+# Aplicado no IngressRoute do frontend (atum.loombeat.com).
+# Funciona como camada adicional de defesa: mesmo que o nginx não envie um header,
+# o Traefik garante que ele chegue ao cliente.
+# Quando nginx e Traefik definem o mesmo header, o Traefik sobrescreve o valor
+# (comportamento de customResponseHeaders com Set, não Append).
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: security-headers
+  namespace: atum
+  labels:
+    app.kubernetes.io/name: atum
+    app.kubernetes.io/component: ingress
+spec:
+  headers:
+    customResponseHeaders:
+      X-Content-Type-Options: "nosniff"
+      X-Frame-Options: "SAMEORIGIN"
+      X-XSS-Protection: "1; mode=block"
+      Referrer-Policy: "strict-origin-when-cross-origin"
+      Permissions-Policy: "camera=(), microphone=(), geolocation=(), payment=()"
+      Strict-Transport-Security: "max-age=31536000; includeSubDomains"
+      Content-Security-Policy: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://image.tmdb.org https://www.themoviedb.org; media-src 'self' blob:; connect-src 'self' wss: ws:; worker-src 'self' blob:; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'self';"
+      Server: ""
