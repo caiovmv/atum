@@ -141,25 +141,29 @@ export function ShakaPlayer({
     setStatus('checking');
 
     try {
-      // Faz o GET no master.m3u8 para disparar a transcodificação e checar status
+      // GET no master.m3u8 dispara a transcodificação backend e verifica se
+      // reprodução progressiva já é possível (primeiro segmento disponível).
       const r = await fetch(hlsUrl, { method: 'GET' });
 
       if (!mountedRef.current) return;
 
       if (r.status === 200) {
-        // Cache já existia, pode inicializar Shaka diretamente
+        // Master manifest disponível: inicia Shaka em modo progressivo.
+        // Se FFmpeg ainda está em andamento, as playlists de variante crescem
+        // incrementalmente e o Shaka as re-busca automaticamente (live-like HLS).
         await initShaka();
         return;
       }
 
       if (r.status === 202) {
-        // FFmpeg em andamento — inicia polling
+        // Segmentos ainda não disponíveis → polling até reprodução ser possível
         setStatus('processing');
+        setProcessingMsg('Preparando vídeo…');
         pollTimerRef.current = setTimeout(pollStatus, 3000);
         return;
       }
 
-      // Qualquer outro erro (400, 500, etc.) → fallback
+      // Qualquer outro erro (400, 500, etc.) → fallback progressivo
       useFallback(`HLS indisponível (${r.status}).`);
     } catch {
       useFallback('Não foi possível conectar ao servidor HLS.');

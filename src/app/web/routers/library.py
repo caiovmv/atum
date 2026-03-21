@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from pydantic import BaseModel
 
 from ...deps import get_library_import_repo, get_settings
-from ..hls_service import ensure_transcoding, get_job, hls_file_path, master_manifest_path
+from ..hls_service import ensure_transcoding, get_job, hls_file_path, is_playable, master_manifest_path
 
 logger = __import__("logging").getLogger(__name__)
 
@@ -982,7 +982,11 @@ async def hls_serve(library_id: int, file_index: int, hls_path: str) -> Response
                 status_code=500,
                 detail=f"Transcodificação HLS falhou: {job.error}",
             )
-        if job.status != "ready":
+        # Reprodução progressiva: serve master.m3u8 assim que o primeiro segmento
+        # de qualquer variante estiver disponível (~6–12 s após o início do FFmpeg).
+        # O Shaka Player re-busca as playlists de variante automaticamente à medida
+        # que novos segmentos chegam (behavior de HLS live), até ver #EXT-X-ENDLIST.
+        if job.status != "ready" and not is_playable(library_id, file_index):
             return Response(
                 status_code=202,
                 headers={"Retry-After": "3", "Cache-Control": "no-store"},
@@ -993,13 +997,25 @@ async def hls_serve(library_id: int, file_index: int, hls_path: str) -> Response
 
     if hls_path.endswith(".m3u8"):
         media_type = "application/vnd.apple.mpegurl"
+        # Playlists de variante crescem durante a transcodificação → nunca cachear
+        # enquanto o job estiver em andamento (Shaka precisa re-buscar para ver novos
+        # segmentos). Após a conclusão, podem ser cacheadas normalmente.
+        job_now = get_job(library_id, file_index)
+        cache_ctrl = (
+            "no-store"
+            if (job_now and job_now.status == "processing")
+            else "public, max-age=3600"
+        )
     elif hls_path.endswith(".ts"):
         media_type = "video/mp2t"
+        # Segmentos são imutáveis — cache agressivo
+        cache_ctrl = "public, max-age=86400"
     else:
         media_type = "application/octet-stream"
+        cache_ctrl = "public, max-age=3600"
 
     return FileResponse(
         str(resolved),
         media_type=media_type,
-        headers={"Cache-Control": "public, max-age=3600"},
+        headers={"Cache-Control": cache_ctrl},
     )

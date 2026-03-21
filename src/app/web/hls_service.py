@@ -90,6 +90,38 @@ def hls_file_path(library_id: int, file_index: int, hls_relative: str) -> Path:
     return _cache_dir(library_id, file_index) / hls_relative
 
 
+# Conteúdo do master.m3u8 pré-gerado (antes do FFmpeg iniciar).
+# Permite que o Shaka Player comece a carregar imediatamente enquanto os
+# segmentos ainda estão sendo gerados — reprodução progressiva "live-like".
+_MASTER_M3U8_TEMPLATE = """\
+#EXTM3U
+#EXT-X-VERSION:3
+
+#EXT-X-STREAM-INF:BANDWIDTH=500000,RESOLUTION=640x360,CODECS="avc1.42c01e,mp4a.40.2"
+stream_0/playlist.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=1500000,RESOLUTION=1280x720,CODECS="avc1.42c01e,mp4a.40.2"
+stream_1/playlist.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=3000000,RESOLUTION=1920x1080,CODECS="avc1.42c01e,mp4a.40.2"
+stream_2/playlist.m3u8
+"""
+
+
+def is_playable(library_id: int, file_index: int) -> bool:
+    """True quando há ao menos uma variante com segmentos disponíveis.
+
+    Usado para habilitar reprodução progressiva: o Shaka Player pode carregar
+    o manifest assim que o primeiro segmento de qualquer variante estiver pronto
+    (~6–12 s após o início do FFmpeg), sem esperar a transcodificação completa.
+    """
+    cache_dir = _cache_dir(library_id, file_index)
+    for v in range(3):
+        pl = cache_dir / f"stream_{v}" / "playlist.m3u8"
+        # Playlist com >100 bytes tem pelo menos uma entrada #EXTINF (1 segmento)
+        if pl.exists() and pl.stat().st_size > 100:
+            return True
+    return False
+
+
 async def ensure_transcoding(library_id: int, file_index: int) -> HLSJob:
     """Garante que o job de transcodificação esteja em andamento ou concluído.
 
@@ -168,16 +200,19 @@ async def _run_ffmpeg(input_path: str, cache_dir: Path, job: HLSJob) -> None:
     - stream_1: 720p @ 1500 kbps
     - stream_2: 1080p @ 3000 kbps
 
-    Os segmentos são escritos em tempo real — Shaka Player pode começar a
-    reproduzir assim que o manifest e os primeiros segmentos estiverem prontos.
+    O master.m3u8 é pré-escrito antes do FFmpeg iniciar. Assim que o primeiro
+    segmento de qualquer variante estiver pronto (~6 s), o Shaka Player pode
+    começar a reproduzir sem esperar a transcodificação completa.
     """
-    # Cria diretórios de segmentos antes do FFmpeg
+    # Cria diretórios e pré-escreve master.m3u8 ANTES do FFmpeg
     for v in range(3):
         (cache_dir / f"stream_{v}").mkdir(parents=True, exist_ok=True)
+    master_file = cache_dir / "master.m3u8"
+    if not master_file.exists():
+        master_file.write_text(_MASTER_M3U8_TEMPLATE, encoding="utf-8")
 
     segment_pattern = str(cache_dir / "stream_%v" / "seg%05d.ts")
     playlist_pattern = str(cache_dir / "stream_%v" / "playlist.m3u8")
-    master_path = str(cache_dir / "master.m3u8")
 
     cmd = [
         "ffmpeg", "-y",
@@ -196,7 +231,8 @@ async def _run_ffmpeg(input_path: str, cache_dir: Path, job: HLSJob) -> None:
         # Variant 2: 1080p
         "-b:v:2", "3000k", "-s:v:2", "1920x1080",
         "-var_stream_map", "v:0,a:0 v:1,a:1 v:2,a:2",
-        "-master_pl_name", "master.m3u8",
+        # event: playlist cresce incrementalmente; Shaka re-busca até ver #EXT-X-ENDLIST
+        "-hls_playlist_type", "event",
         "-hls_time", "6",
         "-hls_list_size", "0",
         "-hls_flags", "independent_segments",
