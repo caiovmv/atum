@@ -77,11 +77,18 @@ spec:
                 secretKeyRef:
                   name: atum-secrets
                   key: BASIC_AUTH_PASS
+          startupProbe:
+            httpGet:
+              path: /api/indexers/status
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
           livenessProbe:
             httpGet:
               path: /api/indexers/status
               port: 8000
-            initialDelaySeconds: 30
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 3
@@ -89,7 +96,6 @@ spec:
             httpGet:
               path: /api/indexers/status
               port: 8000
-            initialDelaySeconds: 15
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3

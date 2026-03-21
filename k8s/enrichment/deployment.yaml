@@ -68,6 +68,13 @@ spec:
             periodSeconds: 30
             timeoutSeconds: 5
             failureThreshold: 3
+          readinessProbe:
+            exec:
+              command: ["pgrep", "-f", "enrichment daemon"]
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
           resources:
             requests:
               cpu: 200m

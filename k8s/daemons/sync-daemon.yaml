@@ -66,6 +66,20 @@ spec:
                 secretKeyRef:
                   name: atum-secrets
                   key: TMDB_READ_ACCESS_TOKEN
+          livenessProbe:
+            exec:
+              command: ["pgrep", "-f", "sync daemon"]
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command: ["pgrep", "-f", "sync daemon"]
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
           resources:
             requests:
               cpu: 100m
