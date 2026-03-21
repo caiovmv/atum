@@ -1,0 +1,28 @@
+# TraefikService com active health check para o frontend
+#
+# O Traefik já respeita os readiness probes do K8s (pods não-ready são removidos
+# dos Endpoints do Service). Este TraefikService adiciona health check ativo
+# no nível do Traefik — uma camada independente do K8s.
+#
+# Nota: o Traefik tem o nome "frontend" tanto para o K8s Service quanto para este
+# TraefikService. O campo "kind" no IngressRoute diferencia os dois.
+apiVersion: traefik.io/v1alpha1
+kind: TraefikService
+metadata:
+  name: frontend
+  namespace: atum
+  labels:
+    app.kubernetes.io/name: frontend
+    app.kubernetes.io/component: web
+spec:
+  weighted:
+    services:
+      - name: frontend
+        kind: Service
+        port: 80
+        weight: 1
+    healthCheck:
+      path: /
+      scheme: http
+      interval: "30s"
+      timeout: "5s"

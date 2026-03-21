@@ -28,6 +28,7 @@ resources:
   - frontend/nginx-k8s-configmap.yaml
   - frontend/deployment.yaml
   - frontend/service.yaml
+  - frontend/traefik-service.yaml
   - frontend/ingress.yaml
 
   # Daemons
