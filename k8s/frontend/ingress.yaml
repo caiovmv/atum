@@ -19,4 +19,4 @@ spec:
           namespace: atum
       services:
         - name: frontend
-          kind: TraefikService
+          port: 80
