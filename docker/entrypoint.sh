@@ -1,8 +1,6 @@
 #!/bin/sh
 set -e
 
-/usr/local/bin/generate-certs.sh
-
 # Basic auth entre frontend e API: nginx adiciona header ao proxy
 # Evita % no printf usando variável separada (%% em alguns shells)
 if [ -n "$BASIC_AUTH_USER" ] && [ -n "$BASIC_AUTH_PASS" ]; then
