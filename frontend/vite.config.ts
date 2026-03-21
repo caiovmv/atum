@@ -81,6 +81,7 @@ export default defineConfig({
             if (id.includes('wavesurfer')) return 'wavesurfer';
             if (id.includes('react-router')) return 'router';
             if (id.includes('three') || id.includes('@react-three')) return 'three';
+            if (id.includes('shaka-player')) return 'shaka';
             return 'vendor';
           }
         },
