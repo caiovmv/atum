@@ -64,3 +64,17 @@ Streaming HLS + Shaka Player — Roadmap e Phase 1 (implement the plan)
 - liveness + eadiness via pgrep adicionados em feed-daemon, sync-daemon, indexers-daemon
 - eadinessProbe adicionado no enrichment-daemon (ja tinha liveness)
 - Tag v1.12.0 criada e publicada
+
+### Prompt 8
+
+resolva todos (em resposta ao diagnóstico de gaps: assert, resolução de variante, evicção de cache, testes backend, testes frontend)
+
+**Resultado:** v1.13.4 — 6 itens resolvidos em 8 arquivos:
+- `hls_service.py`: `assert proc.stderr` substituído por guard explícito; `_get_video_info` (substitui `_get_video_duration`) detecta também a resolução; `_select_variants(height)` seleciona apenas variantes ≤ resolução original (sem upscale); `_build_master_m3u8` e `_build_ffmpeg_cmd` gerados dinamicamente; `is_playable` e `cleanup_partial_caches` usam `glob("stream_*")` em vez de `range(3)` fixo; adicionada função `evict_caches(max_age_days, max_size_gb)`
+- `library.py`: endpoint `POST /hls/evict?max_age_days=30&max_size_gb=100`
+- `k8s/api/hls-cache-eviction-cronjob.yaml` (novo): CronJob diário às 3h que chama o endpoint de evicção
+- `k8s/kustomization.yaml`: inclui o novo CronJob
+- `tests/unit/test_hls_service.py` (novo): 36 testes pytest cobrindo seleção de variantes, geração de m3u8, regex de progresso, cleanup, invalidate, is_playable e evict
+- `ShakaPlayer.tsx`: fix crítico — `<video>` agora sempre está no DOM (overlay de spinner é absoluto); resolve bug onde `videoRef.current` virava null durante 'checking'/'processing' impedindo o Shaka de se anexar
+- `ShakaPlayer.css`: `.shaka-processing-overlay` como camada absoluta sobre o vídeo
+- `frontend/src/components/__tests__/ShakaPlayer.test.tsx` (novo): 14 testes vitest cobrindo todos os estados do componente (ready, processing, fallback, unmount)
