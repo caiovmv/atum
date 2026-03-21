@@ -1,25 +1,26 @@
 # Dashboard do Traefik acessível em https://traefik.loombeat.com
 # Protegido por HTTP Basic Auth.
 # Cloudflare Tunnel faz o SSL — Traefik recebe HTTP puro na porta 80.
+# Todos os recursos ficam em kube-system (namespace do Traefik).
 #
 # PASSO 1 — Criar o Secret com as credenciais (PowerShell):
 #
 #   $USER = "admin"
 #   $PASSWORD = "sua-senha-aqui"
 #   $HASH = kubectl run htpasswd-gen --rm -i --restart=Never --image=httpd:alpine -- htpasswd -nb $USER $PASSWORD 2>$null
-#   kubectl create secret generic traefik-dashboard-auth --from-literal=users="$HASH" -n atum
+#   kubectl create secret generic traefik-dashboard-auth --from-literal=users="$HASH" -n kube-system
 #
 # PASSO 2 — Aplicar este arquivo:
 #   kubectl apply -f k8s/traefik-dashboard.yaml
 #
-# PASSO 3 — Garantir que traefik-letsencrypt.yaml foi aplicado (api.dashboard: true).
+# PASSO 3 — Garantir que traefik-config.yaml foi aplicado (api.dashboard: true).
 ---
 # Middleware: BasicAuth lendo as credenciais do Secret
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: traefik-dashboard-auth
-  namespace: atum
+  namespace: kube-system
 spec:
   basicAuth:
     secret: traefik-dashboard-auth
@@ -29,7 +30,7 @@ apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
   name: traefik-dashboard
-  namespace: atum
+  namespace: kube-system
 spec:
   entryPoints:
     - web
@@ -38,6 +39,7 @@ spec:
       kind: Rule
       middlewares:
         - name: traefik-dashboard-auth
+          namespace: kube-system
       services:
         - name: api@internal
           kind: TraefikService
