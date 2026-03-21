@@ -13,16 +13,18 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type shaka from 'shaka-player';
 import './ShakaPlayer.css';
+
+type ShakaModule = typeof shaka;
+type ShakaPlayer = InstanceType<typeof shaka.Player>;
 
 // Shaka Player exporta via CommonJS; usamos dynamic import para compatibilidade
 // com Vite (tree-shaking não se aplica aqui — a lib tem ~1.5 MB, carregar lazy
 // quando o player é renderizado é mais eficiente).
-async function loadShaka() {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function loadShaka(): Promise<ShakaModule> {
   const mod = await import('shaka-player');
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (mod.default ?? mod) as any;
+  return (mod.default ?? mod) as unknown as ShakaModule;
 }
 
 type PlayerStatus = 'idle' | 'checking' | 'processing' | 'loading' | 'ready' | 'fallback';
@@ -47,8 +49,7 @@ export function ShakaPlayer({
   onVideoRef,
 }: ShakaPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const playerRef = useRef<any>(null);
+  const playerRef = useRef<ShakaPlayer | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
 
@@ -91,9 +92,10 @@ export function ShakaPlayer({
       await player.attach(videoRef.current);
       playerRef.current = player;
 
-      player.addEventListener('error', (event: { detail: { message: string } }) => {
+      player.addEventListener('error', (event) => {
         if (!mountedRef.current) return;
-        useFallback(`Shaka: ${event.detail?.message ?? 'erro desconhecido'}`);
+        const shakaEvent = event as { detail?: { message?: string } };
+        useFallback(`Shaka: ${shakaEvent.detail?.message ?? 'erro desconhecido'}`);
       });
 
       await player.load(hlsUrl);
@@ -110,7 +112,7 @@ export function ShakaPlayer({
     try {
       const r = await fetch(statusUrl);
       if (!r.ok) { useFallback('Erro ao verificar status HLS.'); return; }
-      const data: { status: string; error_message?: string } = await r.json();
+      const data: { status: string; error_message?: string; progress?: number } = await r.json();
 
       if (!mountedRef.current) return;
 
@@ -127,7 +129,7 @@ export function ShakaPlayer({
       }
 
       // 'pending' | 'processing' — continua aguardando
-      const pct = (data as { progress?: number }).progress ?? 0;
+      const pct = data.progress ?? 0;
       setProgress(pct);
       setProcessingMsg(
         data.status === 'processing'

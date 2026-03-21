@@ -151,6 +151,20 @@ class HLSJob:
 # Registro in-memory: {"{library_id}_{file_index}" → HLSJob}
 _jobs: dict[str, HLSJob] = {}
 
+# Semáforo para limitar jobs FFmpeg em paralelo. Criado na primeira chamada
+# (dentro do event loop do FastAPI) para evitar problemas de loop incorreto.
+_ffmpeg_semaphore: asyncio.Semaphore | None = None
+
+
+def _get_ffmpeg_semaphore() -> asyncio.Semaphore:
+    """Retorna o semáforo de concorrência FFmpeg, criando-o na primeira chamada."""
+    global _ffmpeg_semaphore
+    if _ffmpeg_semaphore is None:
+        limit = max(1, get_settings().hls_max_concurrent_jobs)
+        _ffmpeg_semaphore = asyncio.Semaphore(limit)
+        logger.info("HLS: semáforo FFmpeg inicializado com limite=%d", limit)
+    return _ffmpeg_semaphore
+
 
 # ---------------------------------------------------------------------------
 # Helpers internos
@@ -190,6 +204,11 @@ def _safe_read(path: Path) -> str:
 def get_job(library_id: int, file_index: int) -> HLSJob | None:
     """Retorna o job atual (ou None se nunca iniciado)."""
     return _jobs.get(_job_key(library_id, file_index))
+
+
+def get_active_job_count() -> int:
+    """Retorna a quantidade de jobs FFmpeg atualmente em processamento."""
+    return sum(1 for j in _jobs.values() if j.status == "processing")
 
 
 def master_manifest_path(library_id: int, file_index: int) -> Path:
@@ -334,7 +353,20 @@ def evict_caches(max_age_days: int = 30, max_size_gb: float = 100.0) -> dict:
 
     freed_mb = freed_bytes // (1024 * 1024)
     logger.info("HLS eviction: %d cache(s) removido(s), %d MB liberados", evicted, freed_mb)
-    return {"evicted": evicted, "freed_bytes": freed_bytes, "freed_mb": freed_mb}
+
+    # Limpa entradas in-memory cujo cache em disco não existe mais
+    # (jobs com status="error" nunca criam cache → acumulam sem nunca serem eviccionados)
+    orphans = 0
+    for key in list(_jobs.keys()):
+        if _jobs[key].status == "processing":
+            continue  # não remover jobs ativos
+        if not (cache_base / key).exists():
+            _jobs.pop(key, None)
+            orphans += 1
+    if orphans:
+        logger.info("HLS eviction: %d entrada(s) órfã(s) removida(s) do dict", orphans)
+
+    return {"evicted": evicted, "freed_bytes": freed_bytes, "freed_mb": freed_mb, "orphans_cleaned": orphans}
 
 
 async def ensure_transcoding(library_id: int, file_index: int) -> HLSJob:
@@ -447,7 +479,17 @@ async def _run_ffmpeg(input_path: str, cache_dir: Path, job: HLSJob) -> None:
     Detecta a resolução do vídeo fonte via ffprobe e seleciona apenas variantes
     com resolução <= fonte, evitando upscale inútil. O master.m3u8 é pré-escrito
     antes do FFmpeg iniciar para habilitar reprodução progressiva (~6 s de latência).
+
+    Respeita o semáforo de concorrência (HLS_MAX_CONCURRENT_JOBS): se o limite
+    já foi atingido, o job aguarda em fila mantendo status="processing" — o spinner
+    continua visível para o usuário sem nenhuma mudança na API.
     """
+    async with _get_ffmpeg_semaphore():
+        await _run_ffmpeg_inner(input_path, cache_dir, job)
+
+
+async def _run_ffmpeg_inner(input_path: str, cache_dir: Path, job: HLSJob) -> None:
+    """Corpo real do FFmpeg — executado sob o semáforo de concorrência."""
     # Detecta resolução e duração para selecionar variantes adequadas
     info = await _get_video_info(input_path)
     source_height = info.height if info.height > 0 else 1080

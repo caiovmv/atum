@@ -389,3 +389,58 @@ class TestEvictCaches:
             result = hls.evict_caches()
         assert result["evicted"] == 0
         assert result["freed_bytes"] == 0
+
+    def test_cleans_orphan_error_jobs_from_memory(self, tmp_path: Path) -> None:
+        """Jobs com status=error que nunca criaram cache devem ser removidos do dict."""
+        # Job que falhou (sem cache em disco)
+        hls._jobs["90_0"] = hls.HLSJob()
+        hls._jobs["90_0"].status = "error"
+        hls._jobs["90_0"].error = "FFmpeg não encontrado"
+
+        with patch("app.web.hls_service.get_settings", return_value=_make_settings(tmp_path)):
+            result = hls.evict_caches(max_age_days=365, max_size_gb=1000.0)
+
+        assert "90_0" not in hls._jobs
+        assert result.get("orphans_cleaned", 0) >= 1
+
+    def test_does_not_clean_orphan_processing_jobs(self, tmp_path: Path) -> None:
+        """Jobs em processing não devem ser removidos mesmo sem cache em disco."""
+        hls._jobs["91_0"] = hls.HLSJob()
+        hls._jobs["91_0"].status = "processing"
+
+        with patch("app.web.hls_service.get_settings", return_value=_make_settings(tmp_path)):
+            hls.evict_caches(max_age_days=365, max_size_gb=1000.0)
+
+        assert "91_0" in hls._jobs
+        hls._jobs.pop("91_0", None)  # cleanup
+
+
+# ---------------------------------------------------------------------------
+# Semáforo de concorrência FFmpeg
+# ---------------------------------------------------------------------------
+
+
+class TestFfmpegSemaphore:
+    def test_get_active_job_count_zero_initially(self) -> None:
+        """Sem jobs em andamento, contagem deve ser 0."""
+        # Limpa qualquer estado de testes anteriores
+        processing_keys = [k for k, j in hls._jobs.items() if j.status == "processing"]
+        for k in processing_keys:
+            hls._jobs.pop(k, None)
+
+        assert hls.get_active_job_count() == 0
+
+    def test_get_active_job_count_counts_only_processing(self) -> None:
+        """Apenas jobs com status='processing' são contados como ativos."""
+        hls._jobs["100_0"] = hls.HLSJob()  # status=processing por padrão
+        hls._jobs["100_1"] = hls.HLSJob()
+        hls._jobs["100_1"].status = "ready"
+        hls._jobs["100_2"] = hls.HLSJob()
+        hls._jobs["100_2"].status = "error"
+
+        count = hls.get_active_job_count()
+        assert count >= 1  # pelo menos 100_0
+
+        # Cleanup
+        for k in ["100_0", "100_1", "100_2"]:
+            hls._jobs.pop(k, None)

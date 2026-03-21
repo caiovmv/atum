@@ -123,6 +123,10 @@ class Settings(BaseSettings):
     # Pasta para cache de segmentos HLS gerados pelo FFmpeg. Vazio = /app/hls_cache.
     hls_cache_dir: str = ""
 
+    # Máximo de jobs FFmpeg em paralelo. Cada job consome ~1 core inteiro.
+    # Padrão 2: equilibra responsividade e uso de CPU em servidores pequenos.
+    hls_max_concurrent_jobs: int = 2
+
     @property
     def covers_path(self) -> Path:
         """Diretório para cache de capas. Padrão: ~/.dl-torrent/covers."""
