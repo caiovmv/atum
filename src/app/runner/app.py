@@ -406,6 +406,32 @@ def list_download_files(download_id: int, all: bool = False) -> dict:
     return {"download_id": download_id, "files": files}
 
 
+@app.get("/downloads/{download_id}/file-path")
+def get_download_file_path(download_id: int, file_index: int = 0) -> dict:
+    """Retorna o caminho absoluto de um arquivo do download (usado pelo HLS service da API)."""
+    row = get_repo().get(download_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Download não encontrado.")
+    if (row.get("status") or "").lower() != "completed":
+        raise HTTPException(status_code=400, detail="Download não está concluído.")
+    content_path = (row.get("content_path") or "").strip()
+    if not content_path:
+        raise HTTPException(status_code=400, detail="Conteúdo não disponível.")
+    path = None
+    stored = row.get("torrent_files")
+    if isinstance(stored, list) and 0 <= file_index < len(stored):
+        rel = (stored[file_index].get("path") or "").strip()
+        if rel:
+            full = Path(content_path) / rel
+            if full.is_file():
+                path = full
+    if path is None:
+        path = _media_path_at_index(content_path, file_index)
+    if not path or not path.is_file():
+        raise HTTPException(status_code=404, detail="Arquivo não encontrado.")
+    return {"path": str(path), "name": path.name, "suffix": path.suffix.lower()}
+
+
 @app.get("/downloads/{download_id}/stream")
 def stream_download(download_id: int, file_index: int | None = None):
     """Serve um arquivo do download. file_index=N: índice na lista (torrent_files se existir, senão lista de mídia). Omitir = primeiro."""

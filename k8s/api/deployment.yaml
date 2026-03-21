@@ -121,6 +121,8 @@ spec:
             - name: library
               mountPath: /library/concerts
               subPath: concerts
+            - name: hls-cache
+              mountPath: /app/hls_cache
           securityContext:
             capabilities:
               add: ["SYS_PTRACE"]
@@ -131,3 +133,6 @@ spec:
         - name: library
           persistentVolumeClaim:
             claimName: library
+        - name: hls-cache
+          persistentVolumeClaim:
+            claimName: hls-cache

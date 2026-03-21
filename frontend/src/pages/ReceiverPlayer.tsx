@@ -11,6 +11,7 @@ import { useMediaQuery } from '../hooks/useMediaQuery';
 import { usePiP } from '../hooks/usePiP';
 import { useNowPlaying } from '../contexts/NowPlayingContext';
 import { SkeletonPlayer } from '../components/Skeleton';
+import { ShakaPlayer } from '../components/ShakaPlayer';
 import './Player.css';
 
 const AudioVisualizerOverlay = lazy(() =>
@@ -80,16 +81,25 @@ export function ReceiverPlayer() {
         <div className="receiver-layout">
           {rp.isVideo ? (
             <div className="receiver-video-main">
-              <video
-                key={rp.streamUrl}
-                className="receiver-video-player"
-                controls
-                autoPlay
-                playsInline
-                src={rp.streamUrl}
-              >
-                Seu navegador não suporta vídeo.
-              </video>
+              {rp.hlsUrl ? (
+                <ShakaPlayer
+                  key={rp.hlsUrl}
+                  hlsUrl={rp.hlsUrl}
+                  fallbackUrl={rp.streamUrl}
+                  className="receiver-video-player"
+                />
+              ) : (
+                <video
+                  key={rp.streamUrl}
+                  className="receiver-video-player"
+                  controls
+                  autoPlay
+                  playsInline
+                  src={rp.streamUrl}
+                >
+                  Seu navegador não suporta vídeo.
+                </video>
+              )}
               <div className="receiver-video-title">
                 <span className="receiver-video-title-label">{rp.title}</span>
                 <div className="receiver-video-controls-row">

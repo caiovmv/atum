@@ -13,3 +13,17 @@ quero uma pasta chamada k8s, ela deve conter todas definicoes para publicarmos e
 acho melhor o pvc library-music e library-videos virarem apenas library e dentro deste pvc vai ter pasta music, video, series, concert and others in the future.
 
 **Resultado:** PVCs `library-music` (100Gi) e `library-videos` (500Gi) consolidados em único PVC `library` (1Ti) em `k8s/shared-pvcs.yaml`. Todos os deployments (api, runner, sync-daemon, enrichment) atualizados para montar o PVC `library` com `subPath` por categoria (`music`, `videos`, `series`, `concerts`). Paths visíveis nos containers permanecem inalterados.
+
+### Prompt 3
+
+agora quero adicionar health check nos services. e quero implementar todos os headers de seguranca possiveis
+
+**Resultado:** Implementado em 10 arquivos:
+- Criado docker/security-headers.conf com 7 headers: X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, Referrer-Policy, Permissions-Policy, HSTS e Content-Security-Policy (CSP restrita para SPA React com WebGL e TMDB)
+- Dockerfile.frontend atualizado para copiar o arquivo de headers para a imagem
+- docker/nginx.conf e k8s/frontend/nginx-k8s-configmap.yaml atualizados com server_tokens off e include do snippet em cada location block (estrategia necessaria pois nginx nao herda add_header de blocos pai)
+- startupProbe adicionado na api e runner (30 tentativas de 10s = 5min maximos de startup)
+- initialDelaySeconds removido do liveness/readiness apos startupProbe (redundante)
+- liveness + eadiness via pgrep adicionados em feed-daemon, sync-daemon, indexers-daemon
+- eadinessProbe adicionado no enrichment-daemon (ja tinha liveness)
+- Tag v1.12.0 criada e publicada

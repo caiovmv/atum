@@ -12,10 +12,11 @@ from typing import Any
 
 import httpx
 from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
-from fastapi.responses import JSONResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
 from ...deps import get_library_import_repo, get_settings
+from ..hls_service import ensure_transcoding, get_job, hls_file_path, master_manifest_path
 
 logger = __import__("logging").getLogger(__name__)
 
@@ -933,4 +934,72 @@ async def stream_library_item(
     return StreamingResponse(
         _stream(),
         media_type=resp.headers.get("content-type") or "application/octet-stream",
+    )
+
+
+# ---------------------------------------------------------------------------
+# HLS endpoints — streaming adaptativo via FFmpeg
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{library_id}/hls/{file_index}/status")
+async def hls_transcode_status(library_id: int, file_index: int = 0) -> dict:
+    """Retorna o status da transcodificação HLS.
+
+    status: "pending" | "processing" | "ready" | "error"
+    """
+    if master_manifest_path(library_id, file_index).exists():
+        return {"status": "ready", "progress": 100}
+    job = get_job(library_id, file_index)
+    if job is None:
+        return {"status": "pending", "progress": 0}
+    return {
+        "status": job.status,
+        "progress": job.progress,
+        "error_message": job.error,
+    }
+
+
+@router.get("/{library_id}/hls/{file_index}/{hls_path:path}")
+async def hls_serve(library_id: int, file_index: int, hls_path: str) -> Response:
+    """Serve arquivos HLS (master.m3u8, playlists de variante e segmentos .ts).
+
+    Para master.m3u8: dispara a transcodificação FFmpeg se necessário.
+    Retorna 202 Accepted + Retry-After: 3 enquanto o FFmpeg processa.
+    """
+    # Proteção contra path traversal
+    try:
+        resolved = hls_file_path(library_id, file_index, hls_path).resolve()
+        base = master_manifest_path(library_id, file_index).parent.resolve()
+        resolved.relative_to(base)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Caminho HLS inválido.")
+
+    if hls_path == "master.m3u8":
+        job = await ensure_transcoding(library_id, file_index)
+        if job.status == "error":
+            raise HTTPException(
+                status_code=500,
+                detail=f"Transcodificação HLS falhou: {job.error}",
+            )
+        if job.status != "ready":
+            return Response(
+                status_code=202,
+                headers={"Retry-After": "3", "Cache-Control": "no-store"},
+            )
+
+    if not resolved.exists():
+        raise HTTPException(status_code=404, detail="Arquivo HLS não encontrado.")
+
+    if hls_path.endswith(".m3u8"):
+        media_type = "application/vnd.apple.mpegurl"
+    elif hls_path.endswith(".ts"):
+        media_type = "video/mp2t"
+    else:
+        media_type = "application/octet-stream"
+
+    return FileResponse(
+        str(resolved),
+        media_type=media_type,
+        headers={"Cache-Control": "public, max-age=3600"},
     )

@@ -35,3 +35,21 @@ spec:
   resources:
     requests:
       storage: 1Ti
+---
+# Cache de segmentos HLS gerados pelo FFmpeg (Phase 1 — HLS adaptativo).
+# Montado apenas no pod da API em /app/hls_cache.
+# Phase 2: mover para ReadWriteMany se a API for escalada horizontalmente.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: hls-cache
+  namespace: atum
+  labels:
+    app.kubernetes.io/name: atum
+    app.kubernetes.io/component: hls-cache
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 200Gi

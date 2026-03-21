@@ -6,6 +6,7 @@ import { useToast } from '../contexts/ToastContext';
 import { useOfflineSave } from '../hooks/useOfflineSave';
 import { hasFileSystemAccessSupport } from '../utils/fileSystemAccess';
 import { SkeletonPlayer } from '../components/Skeleton';
+import { ShakaPlayer } from '../components/ShakaPlayer';
 import './Player.css';
 
 interface RadioQueueItem {
@@ -83,6 +84,13 @@ export function Player() {
     return isImport
       ? `/api/library/imported/${item.id}/stream?file_index=${idx}`
       : `/api/library/${item.id}/stream?file_index=${idx}`;
+  }, [item, files.length, fileIndex, isImport]);
+
+  // HLS URL para vídeos (somente downloads, não imports)
+  const hlsUrl = useMemo(() => {
+    if (!item || isImport) return null;
+    const idx = fileIndex >= files.length ? 0 : fileIndex;
+    return `/api/library/${item.id}/hls/${idx}/master.m3u8`;
   }, [item, files.length, fileIndex, isImport]);
 
   const isVideo = item?.content_type === 'movies' || item?.content_type === 'tv';
@@ -190,9 +198,13 @@ export function Player() {
         </div>
         <div className="atum-player-media-wrap">
           {isVideo ? (
-            <video key={streamUrl} controls autoPlay playsInline src={streamUrl}>
-              Seu navegador não suporta vídeo.
-            </video>
+            hlsUrl ? (
+              <ShakaPlayer key={hlsUrl} hlsUrl={hlsUrl} fallbackUrl={streamUrl} />
+            ) : (
+              <video key={streamUrl} controls autoPlay playsInline src={streamUrl}>
+                Seu navegador não suporta vídeo.
+              </video>
+            )
           ) : (
             <audio key={streamUrl} controls autoPlay src={streamUrl}>
               Seu navegador não suporta áudio.
@@ -219,18 +231,22 @@ export function Player() {
 
   return (
     <div className="atum-player">
-      <div className="atum-player-media-wrap">
-        {isVideo ? (
-          <video key={streamUrl} controls autoPlay playsInline src={streamUrl}>
-            Seu navegador não suporta vídeo.
-          </video>
-        ) : (
-          <audio key={streamUrl} controls autoPlay src={streamUrl}>
-            Seu navegador não suporta áudio.
-          </audio>
-        )}
-      </div>
-      {hasFileSystemAccessSupport() && (
+        <div className="atum-player-media-wrap">
+          {isVideo ? (
+            hlsUrl ? (
+              <ShakaPlayer key={hlsUrl} hlsUrl={hlsUrl} fallbackUrl={streamUrl} />
+            ) : (
+              <video key={streamUrl} controls autoPlay playsInline src={streamUrl}>
+                Seu navegador não suporta vídeo.
+              </video>
+            )
+          ) : (
+            <audio key={streamUrl} controls autoPlay src={streamUrl}>
+              Seu navegador não suporta áudio.
+            </audio>
+          )}
+        </div>
+        {hasFileSystemAccessSupport() && (
         <div className="atum-player-actions">
           <button
             type="button"

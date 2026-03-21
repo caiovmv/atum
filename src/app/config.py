@@ -120,12 +120,22 @@ class Settings(BaseSettings):
         )
         return str(Path(base).expanduser().resolve())
 
+    # Pasta para cache de segmentos HLS gerados pelo FFmpeg. Vazio = /app/hls_cache.
+    hls_cache_dir: str = ""
+
     @property
     def covers_path(self) -> Path:
         """Diretório para cache de capas. Padrão: ~/.dl-torrent/covers."""
         if self.covers_dir and self.covers_dir.strip():
             return Path(self.covers_dir).expanduser().resolve()
         return Path.home() / ".dl-torrent" / "covers"
+
+    @property
+    def hls_cache_path(self) -> Path:
+        """Diretório para cache HLS. Padrão: /app/hls_cache."""
+        if self.hls_cache_dir and self.hls_cache_dir.strip():
+            return Path(self.hls_cache_dir).expanduser().resolve()
+        return Path("/app/hls_cache")
 
 
 _settings_override: Settings | None = None

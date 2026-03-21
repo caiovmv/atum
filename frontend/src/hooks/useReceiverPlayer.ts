@@ -75,6 +75,14 @@ export function useReceiverPlayer() {
   }, [ctxTrack?.streamUrl, item, files.length, safeFileIndex, isImport]);
 
   const isVideo = item?.content_type === 'movies' || item?.content_type === 'tv';
+
+  // HLS URL — disponível apenas para downloads (não imports) de conteúdo de vídeo.
+  // O componente ShakaPlayer dispara a transcodificação na primeira requisição e
+  // usa o fallbackUrl (stream progressivo) se HLS não estiver disponível.
+  const hlsUrl = useMemo(() => {
+    if (!item || isImport || !isVideo) return null;
+    return `/api/library/${item.id}/hls/${safeFileIndex}/master.m3u8`;
+  }, [item, isImport, isVideo, safeFileIndex]);
   const isRadio = radioQueue && radioQueue.length > 0;
   const hasNext = isRadio
     ? activeRadioQueueIndex + 1 < radioQueue!.length
@@ -373,6 +381,7 @@ export function useReceiverPlayer() {
     item,
     files,
     streamUrl,
+    hlsUrl,
     title,
     isVideo,
     isRadio,
