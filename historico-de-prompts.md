@@ -78,3 +78,14 @@ resolva todos (em resposta ao diagnóstico de gaps: assert, resolução de varia
 - `ShakaPlayer.tsx`: fix crítico — `<video>` agora sempre está no DOM (overlay de spinner é absoluto); resolve bug onde `videoRef.current` virava null durante 'checking'/'processing' impedindo o Shaka de se anexar
 - `ShakaPlayer.css`: `.shaka-processing-overlay` como camada absoluta sobre o vídeo
 - `frontend/src/components/__tests__/ShakaPlayer.test.tsx` (novo): 14 testes vitest cobrindo todos os estados do componente (ready, processing, fallback, unmount)
+
+### Prompt 9
+
+continuar (em resposta ao diagnóstico: _jobs leak, sem semáforo FFmpeg, shaka sem tipos)
+
+**Resultado:** v1.13.5 — 3 itens técnicos resolvidos:
+- `config.py`: `hls_max_concurrent_jobs: int = 2` (configurável via env `HLS_MAX_CONCURRENT_JOBS`)
+- `hls_service.py`: semáforo `asyncio.Semaphore` criado lazily; `_run_ffmpeg` split em wrapper (adquire semáforo) + `_run_ffmpeg_inner`; `evict_caches()` limpa entradas órfãs do dict `_jobs`; `get_active_job_count()` exposta para monitoramento
+- `frontend/src/types/shaka-player.d.ts` (novo): declarações TypeScript para a API do Shaka Player
+- `ShakaPlayer.tsx`: `any` substituído por tipos `ShakaModule` e `ShakaPlayer`; 4 novos testes no backend (total: 40 testes passando)
+- Tag v1.13.5 criada e publicada
