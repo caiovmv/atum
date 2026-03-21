@@ -196,6 +196,7 @@ export function ShakaPlayer({
 
   // ── Render ────────────────────────────────────────────────────────────────
 
+  // Fallback: <video> nativo com src direto (Shaka não é necessário)
   if (status === 'fallback') {
     return (
       <div className={`shaka-player-wrap ${className ?? ''}`.trim()}>
@@ -211,47 +212,12 @@ export function ShakaPlayer({
     );
   }
 
-  if (status === 'processing' || status === 'checking') {
-    const retranscodeUrl = hlsUrl.replace(/\/master\.m3u8$/, '');
-    return (
-      <div className={`shaka-player-wrap ${className ?? ''}`.trim()}>
-        <div className="shaka-processing">
-          <div className="shaka-processing-spinner" />
-          <p>{processingMsg}</p>
-          {progress > 0 && (
-            <div className="shaka-progress-bar" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}>
-              <div className="shaka-progress-fill" style={{ width: `${progress}%` }} />
-            </div>
-          )}
-          <button
-            type="button"
-            className="shaka-retranscode-btn"
-            title="Cancelar e reproduzir via stream direto"
-            onClick={() => useFallback('Usando stream direto.')}
-          >
-            Reproduzir agora (sem HLS)
-          </button>
-          <button
-            type="button"
-            className="shaka-retranscode-btn shaka-retranscode-btn--secondary"
-            title="Forçar re-transcodificação"
-            onClick={async () => {
-              try {
-                await fetch(retranscodeUrl, { method: 'DELETE' });
-              } catch { /* ignorar */ }
-              setStatus('idle');
-              setProgress(0);
-              start();
-            }}
-          >
-            Reiniciar transcodificação
-          </button>
-        </div>
-      </div>
-    );
-  }
+  // Todos os outros estados (idle, checking, processing, loading, ready):
+  // O <video> permanece sempre no DOM para que videoRef.current esteja disponível
+  // quando initShaka() precisar se anexar ao elemento — mesmo durante o overlay.
+  const retranscodeUrl = hlsUrl.replace(/\/master\.m3u8$/, '');
+  const showOverlay = status === 'checking' || status === 'processing';
 
-  // idle, loading, ready → renderiza o elemento <video> (Shaka vai se anexar a ele)
   return (
     <div className={`shaka-player-wrap ${className ?? ''}`.trim()}>
       <video
@@ -260,6 +226,42 @@ export function ShakaPlayer({
         autoPlay={autoPlay}
         playsInline
       />
+      {showOverlay && (
+        <div className="shaka-processing-overlay">
+          <div className="shaka-processing">
+            <div className="shaka-processing-spinner" />
+            <p>{processingMsg}</p>
+            {progress > 0 && (
+              <div className="shaka-progress-bar" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}>
+                <div className="shaka-progress-fill" style={{ width: `${progress}%` }} />
+              </div>
+            )}
+            <button
+              type="button"
+              className="shaka-retranscode-btn"
+              title="Cancelar e reproduzir via stream direto"
+              onClick={() => useFallback('Usando stream direto.')}
+            >
+              Reproduzir agora (sem HLS)
+            </button>
+            <button
+              type="button"
+              className="shaka-retranscode-btn shaka-retranscode-btn--secondary"
+              title="Forçar re-transcodificação"
+              onClick={async () => {
+                try {
+                  await fetch(retranscodeUrl, { method: 'DELETE' });
+                } catch { /* ignorar */ }
+                setStatus('idle');
+                setProgress(0);
+                start();
+              }}
+            >
+              Reiniciar transcodificação
+            </button>
+          </div>
+        </div>
+      )}
       {errorBanner && <div className="shaka-error-banner">{errorBanner}</div>}
     </div>
   );

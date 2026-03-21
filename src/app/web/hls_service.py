@@ -3,9 +3,11 @@
 Fluxo:
 1. Endpoint /hls/{file_index}/master.m3u8 chama ensure_transcoding()
 2. Se não há cache, obtém o caminho do arquivo via Runner (/downloads/{id}/file-path)
-3. Inicia FFmpeg em background (asyncio task) — gera 3 variantes (360p, 720p, 1080p)
-4. Enquanto processa, retorna 202 Accepted; cliente faz polling via /hls/{file_index}/status
-5. Quando pronto, serve master.m3u8 e segmentos via FileResponse
+3. Detecta resolução e duração do vídeo via ffprobe
+4. Seleciona variantes HLS compatíveis com a resolução original (sem upscale)
+5. Inicia FFmpeg em background (asyncio task) — até 3 variantes (360p, 720p, 1080p)
+6. Enquanto processa, retorna 202 Accepted; cliente faz polling via /hls/{file_index}/status
+7. Quando pronto, serve master.m3u8 e segmentos via FileResponse
 
 Limitações Phase 1:
 - Estado em memória (in-process dict) → não sobrevive a restart de pod
@@ -20,6 +22,8 @@ import json
 import logging
 import re
 import shutil
+import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
@@ -39,6 +43,98 @@ HLSStatus = Literal["processing", "ready", "error"]
 # Regex para extrair timestamp de progresso do stderr do FFmpeg:
 # "frame=  100 fps= 30 ... time=00:01:23.45 ..."
 _FFMPEG_TIME_RE = re.compile(r"time=(\d+):(\d+):(\d+(?:\.\d+)?)")
+
+
+# ---------------------------------------------------------------------------
+# Modelos de dados
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class VideoInfo:
+    """Informações de vídeo extraídas via ffprobe."""
+
+    duration: float | None
+    width: int
+    height: int
+
+
+@dataclass
+class _Variant:
+    """Configuração de uma variante HLS."""
+
+    name: str
+    height: int
+    width: int
+    bandwidth: int
+    bitrate: str
+
+
+# Variantes disponíveis, da menor para a maior resolução.
+# Apenas variantes com height <= resolução original são selecionadas.
+_ALL_VARIANTS: list[_Variant] = [
+    _Variant("360p",  360,  640,   500_000, "500k"),
+    _Variant("720p",  720, 1280, 1_500_000, "1500k"),
+    _Variant("1080p", 1080, 1920, 3_000_000, "3000k"),
+]
+
+
+def _select_variants(source_height: int) -> list[_Variant]:
+    """Seleciona variantes com altura ≤ resolução original.
+
+    Garante sempre ao menos uma variante, mesmo que o vídeo seja abaixo de 360p.
+    Evita upscale inútil que desperdiça CPU e espaço em disco.
+    """
+    selected = [v for v in _ALL_VARIANTS if v.height <= source_height]
+    return selected if selected else [_ALL_VARIANTS[0]]
+
+
+def _build_master_m3u8(variants: list[_Variant]) -> str:
+    """Gera o conteúdo do master.m3u8 com base nas variantes selecionadas."""
+    lines = ["#EXTM3U", "#EXT-X-VERSION:3", ""]
+    for i, v in enumerate(variants):
+        lines.append(
+            f'#EXT-X-STREAM-INF:BANDWIDTH={v.bandwidth},'
+            f'RESOLUTION={v.width}x{v.height},'
+            f'CODECS="avc1.42c01e,mp4a.40.2"'
+        )
+        lines.append(f"stream_{i}/playlist.m3u8")
+    return "\n".join(lines) + "\n"
+
+
+def _build_ffmpeg_cmd(input_path: str, cache_dir: Path, variants: list[_Variant]) -> list[str]:
+    """Constrói o comando FFmpeg para HLS adaptativo com múltiplas variantes."""
+    n = len(variants)
+    cmd = ["ffmpeg", "-y", "-i", input_path]
+
+    # Mapeia vídeo e áudio para cada variante (? = opcional se ausente no fonte)
+    for _ in range(n):
+        cmd += ["-map", "0:v:0?", "-map", "0:a:0?"]
+
+    cmd += ["-c:v", "libx264", "-preset", "fast", "-c:a", "aac", "-ac", "2"]
+
+    for i, v in enumerate(variants):
+        cmd += [f"-b:v:{i}", v.bitrate, f"-s:v:{i}", f"{v.width}x{v.height}"]
+
+    var_stream_map = " ".join(f"v:{i},a:{i}" for i in range(n))
+
+    cmd += [
+        "-var_stream_map", var_stream_map,
+        # event: playlist cresce incrementalmente; Shaka re-busca até ver #EXT-X-ENDLIST
+        "-hls_playlist_type", "event",
+        "-hls_time", "6",
+        "-hls_list_size", "0",
+        "-hls_flags", "independent_segments",
+        "-hls_segment_filename", str(cache_dir / "stream_%v" / "seg%05d.ts"),
+        "-f", "hls",
+        str(cache_dir / "stream_%v" / "playlist.m3u8"),
+    ]
+    return cmd
+
+
+# ---------------------------------------------------------------------------
+# Estado de jobs
+# ---------------------------------------------------------------------------
 
 
 class HLSJob:
@@ -78,6 +174,14 @@ def _is_video(path: Path) -> bool:
     return path.suffix.lower() in VIDEO_EXTENSIONS
 
 
+def _safe_read(path: Path) -> str:
+    """Lê um arquivo texto silenciando erros de I/O."""
+    try:
+        return path.read_text(errors="replace")
+    except OSError:
+        return ""
+
+
 # ---------------------------------------------------------------------------
 # API pública
 # ---------------------------------------------------------------------------
@@ -97,22 +201,6 @@ def hls_file_path(library_id: int, file_index: int, hls_relative: str) -> Path:
     return _cache_dir(library_id, file_index) / hls_relative
 
 
-# Conteúdo do master.m3u8 pré-gerado (antes do FFmpeg iniciar).
-# Permite que o Shaka Player comece a carregar imediatamente enquanto os
-# segmentos ainda estão sendo gerados — reprodução progressiva "live-like".
-_MASTER_M3U8_TEMPLATE = """\
-#EXTM3U
-#EXT-X-VERSION:3
-
-#EXT-X-STREAM-INF:BANDWIDTH=500000,RESOLUTION=640x360,CODECS="avc1.42c01e,mp4a.40.2"
-stream_0/playlist.m3u8
-#EXT-X-STREAM-INF:BANDWIDTH=1500000,RESOLUTION=1280x720,CODECS="avc1.42c01e,mp4a.40.2"
-stream_1/playlist.m3u8
-#EXT-X-STREAM-INF:BANDWIDTH=3000000,RESOLUTION=1920x1080,CODECS="avc1.42c01e,mp4a.40.2"
-stream_2/playlist.m3u8
-"""
-
-
 def is_playable(library_id: int, file_index: int) -> bool:
     """True quando há ao menos uma variante com segmentos disponíveis.
 
@@ -121,8 +209,8 @@ def is_playable(library_id: int, file_index: int) -> bool:
     (~6–12 s após o início do FFmpeg), sem esperar a transcodificação completa.
     """
     cache_dir = _cache_dir(library_id, file_index)
-    for v in range(3):
-        pl = cache_dir / f"stream_{v}" / "playlist.m3u8"
+    for variant_dir in cache_dir.glob("stream_*"):
+        pl = variant_dir / "playlist.m3u8"
         # Playlist com >100 bytes tem pelo menos uma entrada #EXTINF (1 segmento)
         if pl.exists() and pl.stat().st_size > 100:
             return True
@@ -160,8 +248,7 @@ def invalidate_all_for_item(library_id: int) -> int:
         suffix = d.name[len(prefix):]
         if not suffix.isdigit():
             continue
-        key = d.name
-        _jobs.pop(key, None)
+        _jobs.pop(d.name, None)
         shutil.rmtree(d, ignore_errors=True)
         removed += 1
     return removed
@@ -184,16 +271,10 @@ def cleanup_partial_caches() -> int:
     for job_dir in list(cache_base.iterdir()):
         if not job_dir.is_dir():
             continue
-        is_complete = False
-        for v in range(3):
-            pl = job_dir / f"stream_{v}" / "playlist.m3u8"
-            if pl.exists():
-                try:
-                    if "#EXT-X-ENDLIST" in pl.read_text(errors="replace"):
-                        is_complete = True
-                        break
-                except OSError:
-                    pass
+        is_complete = any(
+            "#EXT-X-ENDLIST" in _safe_read(pl)
+            for pl in job_dir.glob("stream_*/playlist.m3u8")
+        )
         if not is_complete:
             logger.info("HLS startup cleanup: removendo cache parcial '%s'", job_dir.name)
             shutil.rmtree(job_dir, ignore_errors=True)
@@ -201,6 +282,59 @@ def cleanup_partial_caches() -> int:
     if removed:
         logger.info("HLS startup cleanup: %d cache(s) parcial(is) removido(s)", removed)
     return removed
+
+
+def evict_caches(max_age_days: int = 30, max_size_gb: float = 100.0) -> dict:
+    """Remove caches HLS antigos ou quando o volume excede o limite de tamanho.
+
+    Política de evicção (ambas condições são avaliadas):
+    - Caches com último acesso > max_age_days são sempre removidos.
+    - Se tamanho total > max_size_gb, os caches mais antigos são removidos até
+      ficar abaixo do limite.
+
+    Jobs atualmente em processamento (status="processing") nunca são removidos
+    para não interromper transcodificações em andamento.
+
+    Retorna dict com: evicted (contagem), freed_bytes, freed_mb.
+    """
+    cache_base = get_settings().hls_cache_path
+    if not cache_base.exists():
+        return {"evicted": 0, "freed_bytes": 0, "freed_mb": 0}
+
+    # Nunca remover caches de jobs que ainda estão processando
+    active_keys = {k for k, j in _jobs.items() if j.status == "processing"}
+
+    now = time.time()
+    max_age_secs = max_age_days * 86400
+    max_size_bytes = int(max_size_gb * 1024 ** 3)
+
+    dirs: list[tuple[Path, int, float]] = []
+    for d in cache_base.iterdir():
+        if not d.is_dir() or d.name in active_keys:
+            continue
+        files = list(d.rglob("*"))
+        size = sum(f.stat().st_size for f in files if f.is_file())
+        mtimes = [f.stat().st_mtime for f in files if f.is_file()]
+        last_mtime = max(mtimes) if mtimes else d.stat().st_mtime
+        dirs.append((d, size, last_mtime))
+
+    total_size = sum(s for _, s, _ in dirs)
+    dirs.sort(key=lambda x: x[2])  # mais antigos primeiro
+
+    evicted = 0
+    freed_bytes = 0
+    for d, size, last_mtime in dirs:
+        age_secs = now - last_mtime
+        if age_secs > max_age_secs or total_size > max_size_bytes:
+            _jobs.pop(d.name, None)
+            shutil.rmtree(d, ignore_errors=True)
+            total_size -= size
+            freed_bytes += size
+            evicted += 1
+
+    freed_mb = freed_bytes // (1024 * 1024)
+    logger.info("HLS eviction: %d cache(s) removido(s), %d MB liberados", evicted, freed_mb)
+    return {"evicted": evicted, "freed_bytes": freed_bytes, "freed_mb": freed_mb}
 
 
 async def ensure_transcoding(library_id: int, file_index: int) -> HLSJob:
@@ -257,12 +391,14 @@ async def ensure_transcoding(library_id: int, file_index: int) -> HLSJob:
 # ---------------------------------------------------------------------------
 
 
-async def _get_video_duration(input_path: str) -> float | None:
-    """Retorna a duração do vídeo em segundos via ffprobe. None se não detectado."""
+async def _get_video_info(input_path: str) -> VideoInfo:
+    """Retorna duração e resolução do vídeo via ffprobe. Usa defaults seguros se falhar."""
     cmd = [
         "ffprobe", "-v", "quiet",
         "-print_format", "json",
         "-show_format",
+        "-show_streams",
+        "-select_streams", "v:0",
         input_path,
     ]
     try:
@@ -274,12 +410,19 @@ async def _get_video_duration(input_path: str) -> float | None:
         stdout, _ = await proc.communicate()
         if proc.returncode == 0:
             data = json.loads(stdout.decode(errors="replace"))
-            raw = data.get("format", {}).get("duration")
-            if raw:
-                return float(raw)
+            duration_raw = data.get("format", {}).get("duration")
+            duration = float(duration_raw) if duration_raw else None
+            streams = data.get("streams", [])
+            if streams:
+                return VideoInfo(
+                    duration=duration,
+                    width=int(streams[0].get("width") or 0),
+                    height=int(streams[0].get("height") or 0),
+                )
+            return VideoInfo(duration=duration, width=0, height=0)
     except Exception:
-        logger.debug("ffprobe: não foi possível obter duração de '%s'", input_path)
-    return None
+        logger.debug("ffprobe: não foi possível obter info de '%s'", input_path)
+    return VideoInfo(duration=None, width=0, height=0)
 
 
 async def _fetch_file_path(library_id: int, file_index: int) -> Path | None:
@@ -299,58 +442,36 @@ async def _fetch_file_path(library_id: int, file_index: int) -> Path | None:
 
 
 async def _run_ffmpeg(input_path: str, cache_dir: Path, job: HLSJob) -> None:
-    """Executa FFmpeg em subprocess assíncrono.
+    """Executa FFmpeg em subprocess assíncrono com variantes adaptadas à resolução original.
 
-    Gera HLS adaptativo com 3 variantes:
-    - stream_0: 360p @ 500 kbps
-    - stream_1: 720p @ 1500 kbps
-    - stream_2: 1080p @ 3000 kbps
-
-    O master.m3u8 é pré-escrito antes do FFmpeg iniciar. Assim que o primeiro
-    segmento de qualquer variante estiver pronto (~6 s), o Shaka Player pode
-    começar a reproduzir sem esperar a transcodificação completa.
+    Detecta a resolução do vídeo fonte via ffprobe e seleciona apenas variantes
+    com resolução <= fonte, evitando upscale inútil. O master.m3u8 é pré-escrito
+    antes do FFmpeg iniciar para habilitar reprodução progressiva (~6 s de latência).
     """
+    # Detecta resolução e duração para selecionar variantes adequadas
+    info = await _get_video_info(input_path)
+    source_height = info.height if info.height > 0 else 1080
+    variants = _select_variants(source_height)
+
+    logger.info(
+        "HLS: %s → %d variante(s): %s (fonte: %dx%d, duração: %.1fs)",
+        cache_dir.name,
+        len(variants),
+        [v.name for v in variants],
+        info.width,
+        info.height,
+        info.duration or 0,
+    )
+
     # Cria diretórios e pré-escreve master.m3u8 ANTES do FFmpeg
-    for v in range(3):
-        (cache_dir / f"stream_{v}").mkdir(parents=True, exist_ok=True)
+    for i in range(len(variants)):
+        (cache_dir / f"stream_{i}").mkdir(parents=True, exist_ok=True)
     master_file = cache_dir / "master.m3u8"
     if not master_file.exists():
-        master_file.write_text(_MASTER_M3U8_TEMPLATE, encoding="utf-8")
+        master_file.write_text(_build_master_m3u8(variants), encoding="utf-8")
 
-    segment_pattern = str(cache_dir / "stream_%v" / "seg%05d.ts")
-    playlist_pattern = str(cache_dir / "stream_%v" / "playlist.m3u8")
+    cmd = _build_ffmpeg_cmd(input_path, cache_dir, variants)
 
-    cmd = [
-        "ffmpeg", "-y",
-        "-i", input_path,
-        # Mapeia o primeiro stream de vídeo e áudio (? = opcional, não falha se ausente)
-        "-map", "0:v:0?", "-map", "0:a:0?",
-        "-map", "0:v:0?", "-map", "0:a:0?",
-        "-map", "0:v:0?", "-map", "0:a:0?",
-        # Codec
-        "-c:v", "libx264", "-preset", "fast",
-        "-c:a", "aac", "-ac", "2",
-        # Variant 0: 360p
-        "-b:v:0", "500k", "-s:v:0", "640x360",
-        # Variant 1: 720p
-        "-b:v:1", "1500k", "-s:v:1", "1280x720",
-        # Variant 2: 1080p
-        "-b:v:2", "3000k", "-s:v:2", "1920x1080",
-        "-var_stream_map", "v:0,a:0 v:1,a:1 v:2,a:2",
-        # event: playlist cresce incrementalmente; Shaka re-busca até ver #EXT-X-ENDLIST
-        "-hls_playlist_type", "event",
-        "-hls_time", "6",
-        "-hls_list_size", "0",
-        "-hls_flags", "independent_segments",
-        "-hls_segment_filename", segment_pattern,
-        "-f", "hls",
-        playlist_pattern,
-    ]
-
-    # Obtém duração para calcular progresso real (best-effort)
-    duration = await _get_video_duration(input_path)
-
-    logger.info("HLS: iniciando FFmpeg → %s (duração: %.1fs)", cache_dir, duration or 0)
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -358,10 +479,12 @@ async def _run_ffmpeg(input_path: str, cache_dir: Path, job: HLSJob) -> None:
             stderr=asyncio.subprocess.PIPE,
         )
 
+        if proc.stderr is None:
+            raise RuntimeError("Falha ao criar pipe de stderr para FFmpeg.")
+
         # Lê stderr do FFmpeg em chunks e extrai progresso do timestamp `time=`
         # FFmpeg escreve `\r` (sem newline) para sobrescrever a linha de progresso.
         stderr_tail: list[bytes] = []
-        assert proc.stderr is not None
         buf = b""
         while True:
             chunk = await proc.stderr.read(512)
@@ -375,10 +498,10 @@ async def _run_ffmpeg(input_path: str, cache_dir: Path, job: HLSJob) -> None:
                 text = part.decode(errors="replace")
                 stderr_tail.append(part[-200:])
                 m = _FFMPEG_TIME_RE.search(text)
-                if m and duration and duration > 0:
+                if m and info.duration and info.duration > 0:
                     h, mn, s = m.groups()
                     current = int(h) * 3600 + int(mn) * 60 + float(s)
-                    job.progress = min(99, int(current / duration * 100))
+                    job.progress = min(99, int(current / info.duration * 100))
 
         await proc.wait()
         last_stderr = b"".join(stderr_tail[-20:]).decode(errors="replace")

@@ -20,6 +20,7 @@ resources:
   # Core services
   - api/deployment.yaml
   - api/service.yaml
+  - api/hls-cache-eviction-cronjob.yaml
   - runner/deployment.yaml
   - runner/service.yaml
 

@@ -1,0 +1,40 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: hls-cache-eviction
+  namespace: atum
+  labels:
+    app: hls-cache-eviction
+spec:
+  # Roda todo dia às 3h da manhã
+  schedule: "0 3 * * *"
+  timeZone: "America/Sao_Paulo"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 2
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 300
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: evict
+              image: curlimages/curl:8.7.1
+              command:
+                - sh
+                - -c
+                - |
+                  set -e
+                  echo "Iniciando evicção de cache HLS (max_age_days=30, max_size_gb=100)..."
+                  RESULT=$(curl -sf -X POST \
+                    "http://api.atum.svc.cluster.local:8000/api/library/hls/evict?max_age_days=30&max_size_gb=100")
+                  echo "Resultado: $RESULT"
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 16Mi
+                limits:
+                  cpu: 50m
+                  memory: 32Mi

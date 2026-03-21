@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from ...deps import get_library_import_repo, get_settings
 from ..hls_service import (
     ensure_transcoding,
+    evict_caches,
     get_job,
     hls_file_path,
     invalidate_all_for_item,
@@ -1052,3 +1053,21 @@ async def hls_delete_all_cache(library_id: int) -> dict:
     """
     count = invalidate_all_for_item(library_id)
     return {"invalidated_count": count, "library_id": library_id}
+
+
+@router.post("/hls/evict")
+async def hls_evict_caches(
+    max_age_days: int = Query(30, ge=1, description="Remover caches com acesso mais antigo que N dias"),
+    max_size_gb: float = Query(100.0, gt=0, description="Remover os mais antigos até ficar abaixo de N GB"),
+) -> dict:
+    """Evita que o volume HLS encha: remove caches antigos ou em excesso de tamanho.
+
+    Política:
+    - Caches com último acesso > max_age_days são sempre removidos.
+    - Se tamanho total > max_size_gb, remove os mais antigos até ficar abaixo do limite.
+    - Jobs em andamento nunca são removidos.
+
+    Chamado pelo CronJob K8s diariamente (padrão: 30 dias / 100 GB).
+    """
+    result = evict_caches(max_age_days=max_age_days, max_size_gb=max_size_gb)
+    return result
