@@ -171,3 +171,12 @@ voce padronizou os builds ? / sim
 include pip upgrade before installing packages in all Dockerfiles that use python
 
 **Resultado:** Adicionado `RUN pip install --upgrade pip` antes do primeiro `pip install` em `Dockerfile` e `Dockerfile.enrichment` (únicos com Python). Camada separada para aproveitar cache do Docker. Builds testados localmente antes do commit.
+
+### Prompt 12
+
+quais secrets da minha stack kubernetes não existem ?
+
+**Resultado:** Análise de todos os manifestos vs `secret.yaml`. Encontrados e corrigidos 2 bugs:
+1. `hls-daemon` e `cloud-sync-daemon` referenciavam `postgres-secret` (inexistente) — corrigido para `atum-secrets` (nome correto, consistente com todos os outros workloads)
+2. `api/deployment.yaml`: `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PUBLISHABLE_KEY`, `LASTFM_API_KEY`, `TMDB_READ_ACCESS_TOKEN` definidos em `atum-secrets` mas não injetados no pod — adicionadas as entradas `env` correspondentes
+3. `traefik-dashboard-auth` (namespace kube-system): ausente intencionalmente — criação manual com htpasswd já documentada no `traefik-dashboard.yaml`

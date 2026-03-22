@@ -77,6 +77,46 @@ spec:
                 secretKeyRef:
                   name: atum-secrets
                   key: BASIC_AUTH_PASS
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: atum-secrets
+                  key: JWT_SECRET
+            - name: ADMIN_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: atum-secrets
+                  key: ADMIN_EMAIL
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: atum-secrets
+                  key: ADMIN_PASSWORD
+            - name: STRIPE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: atum-secrets
+                  key: STRIPE_SECRET_KEY
+            - name: STRIPE_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: atum-secrets
+                  key: STRIPE_WEBHOOK_SECRET
+            - name: STRIPE_PUBLISHABLE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: atum-secrets
+                  key: STRIPE_PUBLISHABLE_KEY
+            - name: LASTFM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: atum-secrets
+                  key: LASTFM_API_KEY
+            - name: TMDB_READ_ACCESS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: atum-secrets
+                  key: TMDB_READ_ACCESS_TOKEN
           startupProbe:
             httpGet:
               path: /api/indexers/status
