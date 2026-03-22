@@ -81,3 +81,6 @@ android-twa/
 *.db-journal
 *.db-wal
 *.db-shm
+
+# Secrets do cluster Kubernetes — nunca commitar valores reais
+.env.k8s

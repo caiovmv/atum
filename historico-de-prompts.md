@@ -180,3 +180,13 @@ quais secrets da minha stack kubernetes não existem ?
 1. `hls-daemon` e `cloud-sync-daemon` referenciavam `postgres-secret` (inexistente) — corrigido para `atum-secrets` (nome correto, consistente com todos os outros workloads)
 2. `api/deployment.yaml`: `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PUBLISHABLE_KEY`, `LASTFM_API_KEY`, `TMDB_READ_ACCESS_TOKEN` definidos em `atum-secrets` mas não injetados no pod — adicionadas as entradas `env` correspondentes
 3. `traefik-dashboard-auth` (namespace kube-system): ausente intencionalmente — criação manual com htpasswd já documentada no `traefik-dashboard.yaml`
+
+### Prompt 13
+
+monte um script em scripts/ que faça um delete do workspace atum completo. quero todos os secrets deployados, não quero nada mais sendo feito manualmente. [+ ModuleNotFoundError: No module named 'bcrypt']
+
+**Resultado:**
+1. `pyproject.toml`: adicionadas dependências ausentes `bcrypt>=4.0.0`, `PyJWT>=2.8.0`, `stripe>=8.0.0`, `boto3>=1.34.0` (causavam ModuleNotFoundError em runtime)
+2. `scripts/k8s-reset-atum.ps1`: script PowerShell que deleta o namespace atum, aguarda remoção completa, aplica `kubectl apply -k k8s/`, cria `atum-secrets` e `minio-secret` a partir do `.env.k8s`, e opcionalmente cria `traefik-dashboard-auth`. Suporte a `-SkipDelete` para reaplicar sem destruir.
+3. `.env.k8s.example`: template com todas as chaves necessárias
+4. `.gitignore`: `.env.k8s` adicionado
