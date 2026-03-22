@@ -1,9 +1,9 @@
 """Admin: gerenciamento de planos de assinatura."""
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from ...auth_service import AuthUser, require_backoffice
+from ...auth_service import AuthUser, require_financial, require_super_admin
 
 router = APIRouter(prefix="/plans")
 
@@ -36,7 +36,7 @@ async def _get_pool():
 
 @router.get("")
 async def list_plans(
-    actor: AuthUser = require_backoffice("super_admin", "financial"),
+    actor: AuthUser = Depends(require_financial),
 ) -> list[dict]:
     pool = await _get_pool()
     async with pool.connection() as conn:
@@ -62,7 +62,7 @@ async def list_plans(
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_plan(
     body: PlanRequest,
-    actor: AuthUser = require_backoffice("super_admin"),
+    actor: AuthUser = Depends(require_super_admin),
 ) -> dict:
     if not body.code or not body.name:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "code e name são obrigatórios")
@@ -97,7 +97,7 @@ async def create_plan(
 async def update_plan(
     plan_id: str,
     body: PlanRequest,
-    actor: AuthUser = require_backoffice("super_admin"),
+    actor: AuthUser = Depends(require_super_admin),
 ) -> dict:
     updates = {k: v for k, v in body.model_dump(exclude_none=True).items()}
     if not updates:

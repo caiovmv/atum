@@ -75,8 +75,9 @@ class InviteCreateRequest(BaseModel):
 
 async def _get_db():
     """Importação lazy do pool para evitar dependência circular."""
-    from ...db import get_pool
-    return get_pool()
+    from ...db_postgres import get_async_pool
+    from ...config import get_settings
+    return await get_async_pool(get_settings().database_url)
 
 
 async def _fetch_plan_code(conn, family_id: str) -> str:

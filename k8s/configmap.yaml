@@ -36,3 +36,31 @@ data:
 
   # Timezone
   TZ: America/Sao_Paulo
+
+  # ─── Phase 2: Storage / MinIO ────────────────────────────────────────────────
+  # STORAGE_BACKEND: "minio" para S3-compatible, "local" para filesystem
+  STORAGE_BACKEND: "minio"
+  MINIO_ENDPOINT: "http://minio.atum.svc.cluster.local:9000"
+  MINIO_REGION: "us-east-1"
+
+  # ─── Phase 2: HLS Daemon ─────────────────────────────────────────────────────
+  # Limita transcodificações paralelas por pod do hls-daemon
+  HLS_MAX_CONCURRENT_JOBS: "2"
+
+  # ─── Phase 2: Cloud Sync Daemon ──────────────────────────────────────────────
+  # Dias sem reprodução para mover arquivo ao cold tier (cloud)
+  COLD_TIER_DAYS: "90"
+  # % de uso de disco que dispara o release de pressão
+  STORAGE_PRESSURE_PCT: "85"
+  # Janela de horário permitida para sync (vazio = sem restrição)
+  CLOUD_SYNC_HOURS: ""
+  # Quantidade de itens pré-baixados para uso offline
+  PREFETCH_COUNT: "5"
+
+  # ─── Phase 2: Auth ───────────────────────────────────────────────────────────
+  # Tempo de expiração do access token (minutos)
+  JWT_ACCESS_EXPIRE_MIN: "15"
+  # Tempo de expiração do refresh token (dias)
+  JWT_REFRESH_EXPIRE_DAYS: "30"
+  # Habilitar registro público (false = somente por convite)
+  REGISTRATION_OPEN: "false"

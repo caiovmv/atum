@@ -1,29 +1,21 @@
-"""Admin: códigos promocionais."""
+"""Admin: gerenciamento de códigos promocionais."""
 
-from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, model_validator
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 
-from ...auth_service import AuthUser, require_backoffice
+from ...auth_service import AuthUser, require_financial
 
 router = APIRouter(prefix="/promo-codes")
 
 
 class PromoCodeRequest(BaseModel):
     code: str
-    description: str | None = None
-    discount_percent: int | None = None
-    discount_cents: int | None = None
+    discount_type: str = "percent"
+    discount_value: int = 0
     max_uses: int | None = None
-    applies_to_plan_id: str | None = None
-    valid_until: str | None = None
-
-    @model_validator(mode="after")
-    def check_discount(self) -> "PromoCodeRequest":
-        if self.discount_percent is None and self.discount_cents is None:
-            raise ValueError("Informe discount_percent ou discount_cents")
-        if self.discount_percent is not None and self.discount_cents is not None:
-            raise ValueError("Use apenas discount_percent ou discount_cents, não os dois")
-        return self
+    expires_in_days: int | None = None
+    plan_code: str | None = None
+    stripe_coupon_id: str | None = None
 
 
 async def _get_pool():
@@ -34,54 +26,64 @@ async def _get_pool():
 
 @router.get("")
 async def list_promo_codes(
-    actor: AuthUser = require_backoffice("super_admin", "financial"),
+    actor: AuthUser = Depends(require_financial),
 ) -> list[dict]:
     pool = await _get_pool()
     async with pool.connection() as conn:
         async with conn.cursor() as cur:
             await cur.execute(
-                """SELECT id, code, description, discount_percent, discount_cents,
-                          max_uses, uses_count, applies_to_plan_id,
-                          valid_from, valid_until, created_at
+                """SELECT id, code, discount_type, discount_value,
+                          max_uses, used_count, expires_at, is_active, created_at
                    FROM promo_codes ORDER BY created_at DESC"""
             )
             rows = await cur.fetchall()
 
-    cols = ["id", "code", "description", "discount_percent", "discount_cents",
-            "max_uses", "uses_count", "applies_to_plan_id",
-            "valid_from", "valid_until", "created_at"]
+    cols = ["id", "code", "discount_type", "discount_value",
+            "max_uses", "used_count", "expires_at", "is_active", "created_at"]
     return [dict(zip(cols, r)) for r in rows]
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_promo_code(
     body: PromoCodeRequest,
-    actor: AuthUser = require_backoffice("super_admin", "financial"),
+    actor: AuthUser = Depends(require_financial),
 ) -> dict:
+    if body.discount_type not in ("percent", "fixed"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "discount_type deve ser 'percent' ou 'fixed'")
+
     pool = await _get_pool()
+    expires_sql = "NOW() + INTERVAL '1 day' * %s" if body.expires_in_days else "NULL"
+
     async with pool.connection() as conn:
         async with conn.cursor() as cur:
             await cur.execute(
-                """INSERT INTO promo_codes
-                   (code, description, discount_percent, discount_cents,
-                    max_uses, applies_to_plan_id, valid_until)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s)
-                   RETURNING id""",
-                (body.code, body.description, body.discount_percent, body.discount_cents,
-                 body.max_uses, body.applies_to_plan_id, body.valid_until),
+                f"""INSERT INTO promo_codes (code, discount_type, discount_value,
+                    max_uses, expires_at, stripe_coupon_id)
+                    VALUES (%s, %s, %s, %s, {expires_sql}, %s)
+                    RETURNING id""",
+                (
+                    body.code, body.discount_type, body.discount_value,
+                    body.max_uses,
+                    *([body.expires_in_days] if body.expires_in_days else []),
+                    body.stripe_coupon_id,
+                ),
             )
             row = await cur.fetchone()
+
     return {"id": str(row[0])}
 
 
 @router.delete("/{promo_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_promo_code(
     promo_id: str,
-    actor: AuthUser = require_backoffice("super_admin", "financial"),
+    actor: AuthUser = Depends(require_financial),
 ) -> None:
     pool = await _get_pool()
     async with pool.connection() as conn:
         async with conn.cursor() as cur:
-            await cur.execute("DELETE FROM promo_codes WHERE id = %s RETURNING id", (promo_id,))
+            await cur.execute(
+                "UPDATE promo_codes SET is_active = FALSE WHERE id = %s RETURNING id",
+                (promo_id,),
+            )
             if not await cur.fetchone():
                 raise HTTPException(status.HTTP_404_NOT_FOUND, "Código não encontrado")

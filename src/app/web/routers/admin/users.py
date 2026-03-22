@@ -1,9 +1,15 @@
 """Admin: gerenciamento de usuários."""
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
-from ...auth_service import AuthUser, require_backoffice
+from ...auth_service import (
+    AuthUser,
+    require_any_backoffice,
+    require_financial,
+    require_super_admin,
+    require_support,
+)
 
 router = APIRouter(prefix="/users")
 
@@ -27,7 +33,7 @@ async def list_users(
     search: str = Query("", description="Filtrar por email ou nome"),
     plan_code: str | None = Query(None),
     active_only: bool = Query(True),
-    actor: AuthUser = require_backoffice("super_admin", "support", "financial"),
+    actor: AuthUser = Depends(require_any_backoffice),
 ) -> dict:
     pool = await _get_pool()
     offset = (page - 1) * per_page
@@ -77,7 +83,7 @@ async def list_users(
 @router.get("/{user_id}")
 async def get_user(
     user_id: str,
-    actor: AuthUser = require_backoffice("super_admin", "support", "financial"),
+    actor: AuthUser = Depends(require_any_backoffice),
 ) -> dict:
     pool = await _get_pool()
     async with pool.connection() as conn:
@@ -107,7 +113,7 @@ async def get_user(
 async def patch_user(
     user_id: str,
     body: UserPatchRequest,
-    actor: AuthUser = require_backoffice("super_admin"),
+    actor: AuthUser = Depends(require_super_admin),
 ) -> dict:
     pool = await _get_pool()
     updates: dict = {}
@@ -142,7 +148,7 @@ async def patch_user(
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(
     user_id: str,
-    actor: AuthUser = require_backoffice("super_admin"),
+    actor: AuthUser = Depends(require_super_admin),
 ) -> None:
     pool = await _get_pool()
     async with pool.connection() as conn:

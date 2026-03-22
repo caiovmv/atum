@@ -1,8 +1,8 @@
-"""Admin: visão geral de storage — MinIO, HLS jobs, fila de sync."""
+"""Admin: visão geral de armazenamento."""
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
-from ...auth_service import AuthUser, require_backoffice
+from ...auth_service import AuthUser, require_financial
 
 router = APIRouter(prefix="/storage")
 
@@ -15,64 +15,45 @@ async def _get_pool():
 
 @router.get("/overview")
 async def storage_overview(
-    actor: AuthUser = require_backoffice("super_admin", "financial"),
+    actor: AuthUser = Depends(require_financial),
 ) -> dict:
-    """Resumo de uso de storage: MinIO buckets, HLS jobs ativos, fila de sync."""
-    from ....storage_service import ALL_BUCKETS, BUCKET_HLS, BUCKET_MUSIC, BUCKET_COVERS, get_storage
-
-    storage = get_storage()
-    bucket_usage: dict = {}
-    total_bytes = 0
-    for bucket in ALL_BUCKETS:
-        try:
-            size = storage.bucket_size_bytes(bucket)
-            bucket_usage[bucket] = {"bytes": size, "gb": round(size / 1024**3, 3)}
-            total_bytes += size
-        except Exception as e:
-            bucket_usage[bucket] = {"bytes": 0, "gb": 0, "error": str(e)}
-
     pool = await _get_pool()
     async with pool.connection() as conn:
         async with conn.cursor() as cur:
-            # HLS jobs por status
             await cur.execute(
-                "SELECT status, COUNT(*) FROM hls_jobs GROUP BY status"
+                """SELECT
+                     COUNT(*) FILTER (WHERE storage_tier = 'local') AS local_count,
+                     COUNT(*) FILTER (WHERE storage_tier = 'cloud') AS cloud_count,
+                     COALESCE(SUM(local_size_bytes) FILTER (WHERE storage_tier = 'local'), 0) AS local_bytes,
+                     COALESCE(SUM(local_size_bytes) FILTER (WHERE storage_tier = 'cloud'), 0) AS cloud_bytes
+                   FROM library_imports"""
             )
-            hls_by_status = {r[0]: r[1] for r in await cur.fetchall()}
+            storage_row = await cur.fetchone()
 
-            # Top 10 famílias por uso de storage
             await cur.execute(
-                """SELECT sa.family_id, f.name,
-                          COALESCE(SUM(sa.quantity) FILTER (WHERE sa.addon_type = 'storage_gb'), 0) AS addon_gb,
-                          p.base_storage_gb
-                   FROM families f
-                   JOIN plans p ON p.id = f.plan_id
-                   LEFT JOIN storage_addons sa ON sa.family_id = f.id AND sa.active
-                   GROUP BY f.id, f.name, p.base_storage_gb
-                   ORDER BY (p.base_storage_gb + COALESCE(SUM(sa.quantity) FILTER (WHERE sa.addon_type = 'storage_gb'), 0)) DESC
-                   LIMIT 10"""
+                """SELECT status, COUNT(*) FROM hls_jobs GROUP BY status"""
             )
-            top_families = [
-                {"family_id": str(r[0]), "name": r[1],
-                 "addon_gb": r[2], "base_gb": r[3], "total_gb": r[3] + r[2]}
-                for r in await cur.fetchall()
-            ]
+            hls_rows = await cur.fetchall()
 
-            # Fila de cloud sync
             await cur.execute(
-                "SELECT status, COUNT(*) FROM cloud_sync_queue GROUP BY status"
+                """SELECT operation, COUNT(*), SUM(size_bytes)
+                   FROM cloud_sync_queue
+                   GROUP BY operation"""
             )
-            sync_queue = {r[0]: r[1] for r in await cur.fetchall()}
+            sync_rows = await cur.fetchall()
+
+    hls_by_status = {r[0]: r[1] for r in hls_rows}
+    sync_by_op = {r[0]: {"count": r[1], "size_bytes": r[2]} for r in sync_rows}
 
     return {
-        "minio": {
-            "total_bytes": total_bytes,
-            "total_gb": round(total_bytes / 1024**3, 3),
-            "buckets": bucket_usage,
+        "library": {
+            "local_count": storage_row[0],
+            "cloud_count": storage_row[1],
+            "local_bytes": storage_row[2],
+            "cloud_bytes": storage_row[3],
         },
         "hls_jobs": hls_by_status,
-        "cloud_sync_queue": sync_queue,
-        "top_families_by_quota": top_families,
+        "cloud_sync_queue": sync_by_op,
     }
 
 
@@ -80,40 +61,40 @@ async def storage_overview(
 async def list_hls_jobs(
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
-    job_status: str | None = Query(None, alias="status"),
-    actor: AuthUser = require_backoffice("super_admin"),
+    job_status: str | None = Query(None),
+    actor: AuthUser = Depends(require_financial),
 ) -> dict:
-    """Lista jobs HLS com paginação."""
     pool = await _get_pool()
     offset = (page - 1) * per_page
 
-    filters = ["1=1"]
-    params: list = []
-    if job_status:
-        filters.append("status = %s")
-        params.append(job_status)
-
-    where = " AND ".join(filters)
-
     async with pool.connection() as conn:
         async with conn.cursor() as cur:
+            filters = ["1=1"]
+            params: list = []
+
+            if job_status:
+                filters.append("status = %s")
+                params.append(job_status)
+
+            where = " AND ".join(filters)
             await cur.execute(
-                f"""SELECT id, family_id, library_id, file_index, status,
-                          strategy, progress_pct, minio_prefix, error_msg,
-                          last_accessed_at, created_at, updated_at,
-                          COUNT(*) OVER() AS total
-                   FROM hls_jobs WHERE {where}
-                   ORDER BY updated_at DESC
+                f"""SELECT j.id, j.library_id, j.file_index, j.status, j.strategy,
+                          j.progress_pct, j.error_message, j.created_at, j.started_at, j.finished_at,
+                          COUNT(*) OVER() AS total_count
+                   FROM hls_jobs j
+                   WHERE {where}
+                   ORDER BY j.created_at DESC
                    LIMIT %s OFFSET %s""",
                 params + [per_page, offset],
             )
             rows = await cur.fetchall()
 
-    total = rows[0][12] if rows else 0
-    cols = ["id", "family_id", "library_id", "file_index", "status",
-            "strategy", "progress_pct", "minio_prefix", "error_msg",
-            "last_accessed_at", "created_at", "updated_at"]
+    total = rows[0][10] if rows else 0
+    cols = ["id", "library_id", "file_index", "status", "strategy",
+            "progress_pct", "error_message", "created_at", "started_at", "finished_at"]
     return {
-        "items": [dict(zip(cols, r[:12])) for r in rows],
-        "total": total, "page": page, "per_page": per_page,
+        "items": [dict(zip(cols, r[:10])) for r in rows],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
     }

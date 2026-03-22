@@ -179,12 +179,10 @@ def get_current_user(
 
 def require_backoffice(*allowed_roles: str):
     """
-    Fábrica de dependência: exige que o usuário tenha backoffice_role em `allowed_roles`.
+    Fábrica de dependência: exige backoffice_role em `allowed_roles`.
 
-    Uso:
-        @router.get("/admin/users")
-        def list_users(user = Depends(require_backoffice("super_admin", "support"))):
-            ...
+    SEMPRE use com Depends():
+        actor: AuthUser = Depends(require_backoffice("super_admin", "support"))
     """
     def _dep(user: AuthUser = Depends(get_current_user)) -> AuthUser:
         if not user.backoffice_role or user.backoffice_role not in allowed_roles:
@@ -198,6 +196,29 @@ def require_owner(user: AuthUser = Depends(get_current_user)) -> AuthUser:
     if not user.is_owner:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Apenas o owner da família pode realizar esta ação")
     return user
+
+
+# ─── dependências pré-construídas (importar diretamente nos routers) ──────────
+# Uso: actor: AuthUser = Depends(require_super_admin)
+
+def _make_backoffice_dep(*roles: str):
+    """Cria uma dependência FastAPI resolvível para um conjunto de roles."""
+    from fastapi import Depends as _Depends
+
+    def _dep(user: AuthUser = _Depends(get_current_user)) -> AuthUser:
+        if not user.backoffice_role or user.backoffice_role not in roles:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Acesso não autorizado")
+        return user
+
+    # Preserva nome legível no OpenAPI
+    _dep.__name__ = f"require_{'_or_'.join(roles)}"
+    return _dep
+
+
+require_super_admin = _make_backoffice_dep("super_admin")
+require_financial   = _make_backoffice_dep("super_admin", "financial")
+require_support     = _make_backoffice_dep("super_admin", "support")
+require_any_backoffice = _make_backoffice_dep("super_admin", "financial", "support")
 
 
 # ─── seed do admin inicial ────────────────────────────────────────────────────
