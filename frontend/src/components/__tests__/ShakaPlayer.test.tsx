@@ -50,6 +50,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 function mockFetch(hlsStatus: number) {
@@ -71,7 +72,7 @@ function mockFetch(hlsStatus: number) {
 describe('ShakaPlayer', () => {
   describe('estado "ready" (HLS disponível imediatamente)', () => {
     it('inicializa Shaka Player quando master.m3u8 retorna 200', async () => {
-      global.fetch = mockFetch(200);
+      vi.stubGlobal('fetch', mockFetch(200));
 
       await act(async () => {
         render(<ShakaPlayer hlsUrl={HLS_URL} fallbackUrl={FALLBACK_URL} />);
@@ -84,7 +85,7 @@ describe('ShakaPlayer', () => {
     });
 
     it('não exibe overlay de processamento quando Shaka carrega normalmente', async () => {
-      global.fetch = mockFetch(200);
+      vi.stubGlobal('fetch', mockFetch(200));
 
       await act(async () => {
         render(<ShakaPlayer hlsUrl={HLS_URL} fallbackUrl={FALLBACK_URL} />);
@@ -96,7 +97,7 @@ describe('ShakaPlayer', () => {
     });
 
     it('renderiza <video> sem src (Shaka controla a mídia)', async () => {
-      global.fetch = mockFetch(200);
+      vi.stubGlobal('fetch', mockFetch(200));
 
       await act(async () => {
         render(<ShakaPlayer hlsUrl={HLS_URL} fallbackUrl={FALLBACK_URL} />);
@@ -112,7 +113,7 @@ describe('ShakaPlayer', () => {
 
   describe('estado "processing" (202 Accepted — FFmpeg em andamento)', () => {
     it('exibe overlay com "Preparando vídeo" quando backend retorna 202', async () => {
-      global.fetch = mockFetch(202);
+      vi.stubGlobal('fetch', mockFetch(202));
 
       await act(async () => {
         render(<ShakaPlayer hlsUrl={HLS_URL} fallbackUrl={FALLBACK_URL} />);
@@ -124,7 +125,7 @@ describe('ShakaPlayer', () => {
     });
 
     it('<video> permanece no DOM mesmo durante o overlay de processamento', async () => {
-      global.fetch = mockFetch(202);
+      vi.stubGlobal('fetch', mockFetch(202));
 
       await act(async () => {
         render(<ShakaPlayer hlsUrl={HLS_URL} fallbackUrl={FALLBACK_URL} />);
@@ -139,7 +140,7 @@ describe('ShakaPlayer', () => {
     });
 
     it('exibe botões de ação no estado processing', async () => {
-      global.fetch = mockFetch(202);
+      vi.stubGlobal('fetch', mockFetch(202));
 
       await act(async () => {
         render(<ShakaPlayer hlsUrl={HLS_URL} fallbackUrl={FALLBACK_URL} />);
@@ -154,7 +155,7 @@ describe('ShakaPlayer', () => {
     it('exibe progresso % após polling do status', async () => {
       vi.useFakeTimers();
       try {
-        global.fetch = vi.fn().mockImplementation((url: string) => {
+        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
           if (String(url).includes('master.m3u8')) {
             return Promise.resolve({ ok: false, status: 202, json: () => Promise.resolve({}) });
           }
@@ -162,7 +163,7 @@ describe('ShakaPlayer', () => {
             ok: true, status: 200,
             json: () => Promise.resolve({ status: 'processing', progress: 42 }),
           });
-        });
+        }));
 
         render(<ShakaPlayer hlsUrl={HLS_URL} fallbackUrl={FALLBACK_URL} />);
 
@@ -177,7 +178,7 @@ describe('ShakaPlayer', () => {
     it('barra de progresso exibe fill proporcional ao % recebido', async () => {
       vi.useFakeTimers();
       try {
-        global.fetch = vi.fn().mockImplementation((url: string) => {
+        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
           if (String(url).includes('master.m3u8')) {
             return Promise.resolve({ ok: false, status: 202, json: () => Promise.resolve({}) });
           }
@@ -185,7 +186,7 @@ describe('ShakaPlayer', () => {
             ok: true, status: 200,
             json: () => Promise.resolve({ status: 'processing', progress: 75 }),
           });
-        });
+        }));
 
         render(<ShakaPlayer hlsUrl={HLS_URL} fallbackUrl={FALLBACK_URL} />);
 
@@ -202,7 +203,7 @@ describe('ShakaPlayer', () => {
     it('inicia Shaka quando polling retorna status=ready', async () => {
       vi.useFakeTimers();
       try {
-        global.fetch = vi.fn().mockImplementation((url: string) => {
+        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
           if (String(url).includes('master.m3u8')) {
             return Promise.resolve({ ok: false, status: 202, json: () => Promise.resolve({}) });
           }
@@ -210,7 +211,7 @@ describe('ShakaPlayer', () => {
             ok: true, status: 200,
             json: () => Promise.resolve({ status: 'ready', progress: 100 }),
           });
-        });
+        }));
 
         render(<ShakaPlayer hlsUrl={HLS_URL} fallbackUrl={FALLBACK_URL} />);
 
@@ -227,7 +228,7 @@ describe('ShakaPlayer', () => {
     it('exibe mensagem de erro quando polling retorna status=error', async () => {
       vi.useFakeTimers();
       try {
-        global.fetch = vi.fn().mockImplementation((url: string) => {
+        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
           if (String(url).includes('master.m3u8')) {
             return Promise.resolve({ ok: false, status: 202, json: () => Promise.resolve({}) });
           }
@@ -235,7 +236,7 @@ describe('ShakaPlayer', () => {
             ok: true, status: 200,
             json: () => Promise.resolve({ status: 'error', error_message: 'FFmpeg falhou' }),
           });
-        });
+        }));
 
         render(<ShakaPlayer hlsUrl={HLS_URL} fallbackUrl={FALLBACK_URL} />);
 
@@ -249,7 +250,7 @@ describe('ShakaPlayer', () => {
 
     it('botão "Reiniciar" envia DELETE para o endpoint HLS', async () => {
       const fetchMock = mockFetch(202);
-      global.fetch = fetchMock;
+      vi.stubGlobal('fetch', fetchMock);
 
       await act(async () => {
         render(<ShakaPlayer hlsUrl={HLS_URL} fallbackUrl={FALLBACK_URL} />);
@@ -261,8 +262,8 @@ describe('ShakaPlayer', () => {
         fireEvent.click(screen.getByText(/Reiniciar transcodificação/i));
       });
 
-      const deleteCalls = fetchMock.mock.calls.filter(
-        ([, opts]: [string, RequestInit | undefined]) => opts?.method === 'DELETE',
+      const deleteCalls = (fetchMock.mock.calls as [string, RequestInit | undefined][]).filter(
+        ([, opts]) => opts?.method === 'DELETE',
       );
       expect(deleteCalls.length).toBeGreaterThan(0);
     });
@@ -270,7 +271,7 @@ describe('ShakaPlayer', () => {
 
   describe('estado "fallback"', () => {
     it('renderiza <video> com src do fallback quando HLS retorna 500', async () => {
-      global.fetch = mockFetch(500);
+      vi.stubGlobal('fetch', mockFetch(500));
 
       await act(async () => {
         render(<ShakaPlayer hlsUrl={HLS_URL} fallbackUrl={FALLBACK_URL} />);
@@ -284,7 +285,7 @@ describe('ShakaPlayer', () => {
     });
 
     it('botão "Reproduzir agora" exibe vídeo fallback ao clicar', async () => {
-      global.fetch = mockFetch(202);
+      vi.stubGlobal('fetch', mockFetch(202));
 
       await act(async () => {
         render(<ShakaPlayer hlsUrl={HLS_URL} fallbackUrl={FALLBACK_URL} />);
@@ -306,7 +307,7 @@ describe('ShakaPlayer', () => {
 
   describe('limpeza (unmount)', () => {
     it('chama player.destroy() ao desmontar o componente', async () => {
-      global.fetch = mockFetch(200);
+      vi.stubGlobal('fetch', mockFetch(200));
 
       const { unmount } = render(<ShakaPlayer hlsUrl={HLS_URL} fallbackUrl={FALLBACK_URL} />);
 

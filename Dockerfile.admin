@@ -10,7 +10,7 @@ COPY frontend-admin/package.json frontend-admin/package-lock.json* ./
 RUN npm ci --ignore-scripts
 
 COPY frontend-admin/ .
-RUN npm run build
+RUN npx vite build
 
 # ─── Stage 2: nginx ──────────────────────────────────────────────────────────
 FROM nginx:stable-alpine

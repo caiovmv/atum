@@ -53,7 +53,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push API
+      - name: Build and push API + Runner
+        # API e Runner compartilham o mesmo Dockerfile — diferem apenas no
+        # command/entrypoint definido nos manifests Kubernetes.
+        # Uma única build gera as duas tags, evitando compilação duplicada.
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -62,20 +65,10 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.OWNER }}/atum-api:${{ steps.tag.outputs.tag }}
             ${{ env.REGISTRY }}/${{ env.OWNER }}/atum-api:latest
-          cache-from: type=gha,scope=api
-          cache-to: type=gha,mode=max,scope=api
-
-      - name: Build and push Runner
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          tags: |
             ${{ env.REGISTRY }}/${{ env.OWNER }}/atum-runner:${{ steps.tag.outputs.tag }}
             ${{ env.REGISTRY }}/${{ env.OWNER }}/atum-runner:latest
-          cache-from: type=gha,scope=runner
-          cache-to: type=gha,mode=max,scope=runner
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
 
       - name: Build and push Frontend
         uses: docker/build-push-action@v6
@@ -154,7 +147,8 @@ jobs:
             ghcr.io/caiovmv/atum-api:${TAG} \
             ghcr.io/caiovmv/atum-runner:${TAG} \
             ghcr.io/caiovmv/atum-frontend:${TAG} \
-            ghcr.io/caiovmv/atum-enrichment:${TAG}
+            ghcr.io/caiovmv/atum-enrichment:${TAG} \
+            ghcr.io/caiovmv/atum-admin:${TAG}
 
       - name: Apply manifests
         run: kubectl apply -k k8s/

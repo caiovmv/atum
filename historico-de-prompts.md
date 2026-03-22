@@ -61,8 +61,10 @@ Streaming HLS + Shaka Player — Roadmap e Phase 1 (implement the plan)
 - docker/nginx.conf e k8s/frontend/nginx-k8s-configmap.yaml atualizados com server_tokens off e include do snippet em cada location block (estrategia necessaria pois nginx nao herda add_header de blocos pai)
 - startupProbe adicionado na api e runner (30 tentativas de 10s = 5min maximos de startup)
 - initialDelaySeconds removido do liveness/readiness apos startupProbe (redundante)
-- liveness + eadiness via pgrep adicionados em feed-daemon, sync-daemon, indexers-daemon
-- eadinessProbe adicionado no enrichment-daemon (ja tinha liveness)
+- liveness + 
+eadiness via pgrep adicionados em feed-daemon, sync-daemon, indexers-daemon
+- 
+eadinessProbe adicionado no enrichment-daemon (ja tinha liveness)
 - Tag v1.12.0 criada e publicada
 
 ### Prompt 8
@@ -136,3 +138,30 @@ o que mais falta ?
 2. `admin/invites.py`: coluna `plan_code` não existe em `invite_codes` — resolvido plan_code → plan_id via SELECT antes do INSERT; `created_by UUID NOT NULL` ausente no INSERT → preenchido com `actor.id`
 3. `admin/settings.py`: `app_settings.value JSONB` exige JSON válido → corrigido com `json.dumps()` + cast `::jsonb`
 4. `auth_service.py`: variável `raw` não usada em `create_refresh_token` → removida
+
+### Prompt 8
+
+[log de falha do GitHub Actions — build Docker do frontend falhando com erros TypeScript no `tsc -b`]
+
+**Resultado:** Corrigidos 3 erros que quebravam o build do `Dockerfile.frontend`:
+1. `ShakaPlayer.test.tsx`: substituídos todos os `global.fetch = ...` por `vi.stubGlobal('fetch', ...)` (API idiomática do Vitest; `global` não existe no contexto DOM/browser do TypeScript)
+2. `ShakaPlayer.test.tsx`: adicionado `vi.unstubAllGlobals()` no `afterEach` para limpeza correta dos stubs
+3. `ShakaPlayer.test.tsx`: corrigido tipo no `.filter()` — cast explícito `fetchMock.mock.calls as [string, RequestInit | undefined][]` eliminando o erro TS2769
+4. `Account.tsx`: já estava correto (sem `import React` desnecessário) — o erro era da versão da tag v2.0.2 anterior às correções locais
+
+### Prompt 9
+
+voce padronizou os builds ? / sim
+
+**Resultado:** Padronizados builds do CI/CD:
+1. `Dockerfile.frontend`: substituído `npm run build` (`tsc -b && vite build`) por `npx vite build` — type-check já acontece no `ci.yml` antes do push da tag; rodar novamente no Docker era redundante e frágil
+2. `build-and-push-ghcr.yml`: fundidos steps "Build API" e "Build Runner" em um único step com múltiplas tags — ambos usavam o mesmo `Dockerfile`, gerando build duplicado com cache separado desnecessário
+3. `build-and-push-ghcr.yml`: adicionado `atum-admin` ao `kustomize edit set image` no job de deploy — a imagem era construída mas nunca atualizada no cluster
+
+### Prompt 10
+
+[log de falha — `npm ci` no `Dockerfile.admin` falha por ausência de `package-lock.json`]
+
+**Resultado:**
+1. Gerado `frontend-admin/package-lock.json` via `npm install --package-lock-only` (Node v22 no host)
+2. `Dockerfile.admin`: substituído `npm run build` (`tsc && vite build`) por `npx vite build` — mesmo padrão adotado no `Dockerfile.frontend`

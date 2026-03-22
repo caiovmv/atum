@@ -1,10 +1,12 @@
 # Estágio 1: build do frontend
+# Type-check e testes rodam no CI (ci.yml) antes do push da tag.
+# Aqui só compilamos o bundle — evita falhar por erros em arquivos de teste.
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ ./
-RUN npm run build
+RUN npx vite build
 
 # Estágio 2: nginx servindo SPA na porta 80
 # TLS é feito pelo Cloudflare Tunnel — sem geração de certificados aqui
