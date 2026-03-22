@@ -126,3 +126,13 @@ sim por favor
 5. `k8s/secret.yaml`: adicionados `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `STRIPE_*` ao secret existente + novo secret `minio-secret` separado para rotação independente
 6. `k8s/configmap.yaml`: adicionadas variáveis `STORAGE_BACKEND`, `MINIO_ENDPOINT`, `MINIO_REGION`, `HLS_MAX_CONCURRENT_JOBS`, `COLD_TIER_DAYS`, `STORAGE_PRESSURE_PCT`, `CLOUD_SYNC_HOURS`, `PREFETCH_COUNT`, `JWT_ACCESS_EXPIRE_MIN`, `JWT_REFRESH_EXPIRE_DAYS`, `REGISTRATION_OPEN`
 7. `.env.example`: documentadas todas as novas variáveis da Phase 2 com comentários e instruções
+
+### Prompt 7
+
+o que mais falta ?
+
+**Resultado:** v2.0.2 — diagnóstico ativo e correção de 4 bugs de schema que causariam falhas em runtime:
+1. `admin/invites.py`: `used_count` → `uses_count` (nome correto da coluna na migration 014)
+2. `admin/invites.py`: coluna `plan_code` não existe em `invite_codes` — resolvido plan_code → plan_id via SELECT antes do INSERT; `created_by UUID NOT NULL` ausente no INSERT → preenchido com `actor.id`
+3. `admin/settings.py`: `app_settings.value JSONB` exige JSON válido → corrigido com `json.dumps()` + cast `::jsonb`
+4. `auth_service.py`: variável `raw` não usada em `create_refresh_token` → removida
