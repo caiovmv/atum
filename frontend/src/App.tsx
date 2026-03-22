@@ -1,4 +1,5 @@
-import React, { lazy, Suspense } from 'react';
+import type React from 'react';
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Routes, Route } from 'react-router-dom';
 import { DownloadsEventsProvider } from './contexts/DownloadsEventsContext';
 import { ToastProvider } from './contexts/ToastContext';
