@@ -138,6 +138,20 @@ Write-Ok "Cluster acessivel."
 
 # 3. Deletar namespace (opcional)
 if (-not $SkipDelete) {
+    Write-Host ""
+    Write-Host "  ATENCAO — OPERACAO DESTRUTIVA E IRREVERSIVEL" -ForegroundColor Red
+    Write-Host "  O namespace 'atum' sera deletado por completo, incluindo:" -ForegroundColor Yellow
+    Write-Host "    - Todos os pods, deployments e services" -ForegroundColor Yellow
+    Write-Host "    - Todos os PVCs (library 1Ti, postgres 10Gi, minio 500Gi, hls-cache 200Gi, covers 5Gi, redis 2Gi)" -ForegroundColor Yellow
+    Write-Host "    - Os dados fisicos nos PVs serao apagados (reclaimPolicy: Delete)" -ForegroundColor Yellow
+    Write-Host "    - A biblioteca de midia e o banco de dados serao perdidos permanentemente" -ForegroundColor Yellow
+    Write-Host ""
+    $confirm = Read-Host "  Digite 'DELETAR' para confirmar"
+    if ($confirm -ne "DELETAR") {
+        Write-Host "  Operacao cancelada." -ForegroundColor Green
+        exit 0
+    }
+
     Write-Step "Deletando namespace atum"
     kubectl delete namespace atum --ignore-not-found --wait=false
     Wait-NamespaceGone "atum"
