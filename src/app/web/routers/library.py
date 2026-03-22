@@ -1071,3 +1071,127 @@ async def hls_evict_caches(
     """
     result = evict_caches(max_age_days=max_age_days, max_size_gb=max_size_gb)
     return result
+
+
+# ---------------------------------------------------------------------------
+# HLS v2 — jobs no banco + segmentos no MinIO (processados pelo hls-daemon)
+# ---------------------------------------------------------------------------
+
+@router.post("/{library_id}/hls/{file_index}/start")
+async def hls_start_job(library_id: int, file_index: int = 0) -> dict:
+    """Cria ou retorna job HLS existente. O hls-daemon processa assincronamente."""
+    from ...db_postgres import get_async_pool
+    from ...config import get_settings
+    from ...storage_service import BUCKET_HLS, get_storage, hls_prefix
+
+    pool = await get_async_pool(get_settings().database_url)
+    async with pool.connection() as conn:
+        async with conn.cursor() as cur:
+            # Busca job existente
+            await cur.execute(
+                """SELECT id, status, progress_pct, minio_prefix, error_msg
+                   FROM hls_jobs
+                   WHERE library_id = %s AND file_index = %s
+                   ORDER BY created_at DESC LIMIT 1""",
+                (library_id, file_index),
+            )
+            row = await cur.fetchone()
+
+            if row:
+                job_id, status, progress, prefix, error = row
+                if status in ("done", "processing", "pending"):
+                    return {
+                        "job_id": str(job_id),
+                        "status": status,
+                        "progress_pct": progress,
+                        "minio_prefix": prefix,
+                    }
+
+            # Resolve family_id (usa o primeiro da lib — será melhorado com auth)
+            await cur.execute("SELECT family_id FROM library_imports WHERE id = %s", (library_id,))
+            lib_row = await cur.fetchone()
+            family_id = str(lib_row[0]) if lib_row and lib_row[0] else "00000000-0000-0000-0000-000000000000"
+
+            # Cria novo job
+            await cur.execute(
+                """INSERT INTO hls_jobs (family_id, library_id, file_index, strategy)
+                   VALUES (%s, %s, %s, 'on_demand')
+                   ON CONFLICT (family_id, library_id, file_index)
+                   DO UPDATE SET status = 'pending', progress_pct = 0, updated_at = NOW()
+                   RETURNING id""",
+                (family_id, library_id, file_index),
+            )
+            job_row = await cur.fetchone()
+
+    return {
+        "job_id": str(job_row[0]),
+        "status": "pending",
+        "progress_pct": 0,
+    }
+
+
+@router.get("/{library_id}/hls/{file_index}/status-v2")
+async def hls_status_v2(library_id: int, file_index: int = 0) -> dict:
+    """Status do job HLS no banco (usado pelo hls-daemon)."""
+    from ...db_postgres import get_async_pool
+    from ...config import get_settings
+
+    pool = await get_async_pool(get_settings().database_url)
+    async with pool.connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """SELECT id, status, progress_pct, minio_prefix, error_msg, updated_at
+                   FROM hls_jobs
+                   WHERE library_id = %s AND file_index = %s
+                   ORDER BY created_at DESC LIMIT 1""",
+                (library_id, file_index),
+            )
+            row = await cur.fetchone()
+
+    if not row:
+        return {"status": "not_started"}
+
+    job_id, status, progress, prefix, error, updated_at = row
+    return {
+        "job_id": str(job_id),
+        "status": status,
+        "progress_pct": progress,
+        "minio_prefix": prefix,
+        "error_msg": error,
+        "updated_at": updated_at,
+    }
+
+
+@router.get("/{library_id}/hls/{file_index}/presign/{hls_path:path}")
+async def hls_presign(library_id: int, file_index: int, hls_path: str) -> dict:
+    """Gera URL pré-assinada MinIO para acesso direto ao segmento/playlist HLS."""
+    from ...db_postgres import get_async_pool
+    from ...config import get_settings
+    from ...storage_service import BUCKET_HLS, get_storage
+
+    # Segurança: evita path traversal
+    if ".." in hls_path or hls_path.startswith("/"):
+        raise HTTPException(status_code=400, detail="Path inválido")
+
+    pool = await get_async_pool(get_settings().database_url)
+    async with pool.connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """SELECT minio_prefix FROM hls_jobs
+                   WHERE library_id = %s AND file_index = %s AND status = 'done'
+                   ORDER BY created_at DESC LIMIT 1""",
+                (library_id, file_index),
+            )
+            row = await cur.fetchone()
+
+    if not row or not row[0]:
+        raise HTTPException(status_code=404, detail="HLS não disponível para este item")
+
+    prefix = row[0].replace(f"s3://{BUCKET_HLS}/", "")
+    key = f"{prefix}{hls_path}"
+    storage = get_storage()
+
+    # Para m3u8 em andamento → sem cache; para segmentos → expiração longa
+    expires = 300 if hls_path.endswith(".m3u8") else 86400
+    url = storage.presign_get(BUCKET_HLS, key, expires_sec=expires)
+    return {"url": url, "expires_in": expires}

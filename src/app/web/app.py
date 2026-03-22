@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import json
 from contextlib import asynccontextmanager
 from os import environ
 from pathlib import Path
@@ -13,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.requests import Request
-from starlette.responses import FileResponse, Response
+from starlette.responses import FileResponse, JSONResponse, Response
 
 from .routers import ai_prompts_router, chat_router, cover_router, downloads_router, feeds_router, indexers_router, library_router, notifications_router, playlist_router, radio_router, recommendations_router, search_router, settings_router, voice_router, wishlist_router
 
@@ -30,7 +31,21 @@ async def _lifespan(app: FastAPI):
         _log.warning("DATABASE_URL não configurado — operações de banco vão falhar")
     else:
         from ..db_postgres import get_async_pool
-        await get_async_pool(db_url)
+        pool = await get_async_pool(db_url)
+
+        # Inicializa storage (garante buckets MinIO)
+        try:
+            from ..storage_service import init_storage
+            init_storage()
+        except Exception:
+            _log.exception("storage: falha ao inicializar")
+
+        # Seed do usuário admin inicial
+        try:
+            from .auth_service import seed_admin_user
+            await seed_admin_user(pool)
+        except Exception:
+            _log.exception("auth: falha no seed do admin")
 
     # Remove caches HLS parciais de transcodificações interrompidas por restart
     try:
@@ -66,27 +81,73 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Rotas públicas que não exigem JWT (prefixos)
+_PUBLIC_PREFIXES = (
+    "/api/auth/",
+    "/api/webhooks/",
+    "/api/indexers/status",  # healthcheck exposto ao frontend antes do login
+)
 
-class _BasicAuthMiddleware(BaseHTTPMiddleware):
-    """Exige Authorization: Basic quando BASIC_AUTH_USER e BASIC_AUTH_PASS estão configurados."""
+
+class _JWTAuthMiddleware(BaseHTTPMiddleware):
+    """
+    Valida Bearer token JWT em todas as rotas /api/* exceto as públicas.
+
+    Fallback para _BasicAuthMiddleware quando jwt_secret não está configurado
+    (compatibilidade retroativa com instâncias sem auth JWT).
+    """
 
     async def dispatch(self, request: Request, call_next) -> Response:
         from ..config import get_settings
-
         s = get_settings()
+
+        # Sem jwt_secret configurado → fallback para Basic Auth legado
+        if not s.jwt_secret:
+            return await self._basic_auth_fallback(request, call_next, s)
+
+        path = request.url.path
+
+        # Não é rota de API → passa direto (SPA, assets)
+        if not path.startswith("/api/"):
+            return await call_next(request)
+
+        # Preflight CORS → sem auth
+        if request.method == "OPTIONS":
+            return await call_next(request)
+
+        # Rotas públicas
+        for prefix in _PUBLIC_PREFIXES:
+            if path.startswith(prefix) or path == prefix.rstrip("/"):
+                return await call_next(request)
+
+        # Valida Bearer token
+        auth = request.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            return JSONResponse({"detail": "Token não fornecido"}, status_code=401)
+
+        token = auth[7:]
+        try:
+            import jwt as pyjwt
+            pyjwt.decode(token, s.jwt_secret, algorithms=["HS256"])
+        except pyjwt.ExpiredSignatureError:
+            return JSONResponse({"detail": "Token expirado"}, status_code=401)
+        except pyjwt.InvalidTokenError:
+            return JSONResponse({"detail": "Token inválido"}, status_code=401)
+
+        return await call_next(request)
+
+    @staticmethod
+    async def _basic_auth_fallback(request: Request, call_next, s) -> Response:
         if not s.basic_auth_user or not s.basic_auth_pass:
             return await call_next(request)
-
         if not request.url.path.startswith("/api/"):
             return await call_next(request)
-        # Preflight CORS e healthcheck sem auth
         if request.method == "OPTIONS" or request.url.path in ("/api/indexers/status",):
             return await call_next(request)
 
-        auth = request.headers.get("Authorization")
-        if not auth or not auth.startswith("Basic "):
+        auth = request.headers.get("Authorization", "")
+        if not auth.startswith("Basic "):
             return Response(status_code=401, headers={"WWW-Authenticate": 'Basic realm="Atum"'})
-
         try:
             raw = base64.b64decode(auth[6:]).decode("utf-8")
             user, _, passwd = raw.partition(":")
@@ -94,12 +155,14 @@ class _BasicAuthMiddleware(BaseHTTPMiddleware):
                 return Response(status_code=401, headers={"WWW-Authenticate": 'Basic realm="Atum"'})
         except Exception:
             return Response(status_code=401, headers={"WWW-Authenticate": 'Basic realm="Atum"'})
-
         return await call_next(request)
 
 
-app.add_middleware(_BasicAuthMiddleware)
+app.add_middleware(_JWTAuthMiddleware)
 
+from .routers.auth import router as auth_router
+
+api.include_router(auth_router)
 api.include_router(search_router)
 api.include_router(indexers_router)
 api.include_router(cover_router)
@@ -115,6 +178,21 @@ api.include_router(settings_router)
 api.include_router(chat_router)
 api.include_router(recommendations_router)
 api.include_router(ai_prompts_router)
+
+# Admin routers (requer backoffice_role)
+try:
+    from .routers.admin import router as admin_router
+    api.include_router(admin_router)
+except ImportError:
+    pass  # admin module não implementado ainda
+
+# Stripe webhooks (sem JWT — usa assinatura Stripe-Signature)
+try:
+    from .routers.stripe_webhooks import router as stripe_router
+    api.include_router(stripe_router)
+except ImportError:
+    pass
+
 app.include_router(api)
 
 # SPA Atum: servir frontend build (npm run build em frontend/)
@@ -199,6 +277,21 @@ def detail_sub_spa():
 
 @app.get("/search", include_in_schema=False)
 def search_spa():
+    return _serve_spa_index()
+
+
+@app.get("/login", include_in_schema=False)
+def login_spa():
+    return _serve_spa_index()
+
+
+@app.get("/register", include_in_schema=False)
+def register_spa():
+    return _serve_spa_index()
+
+
+@app.get("/account", include_in_schema=False)
+def account_spa():
     return _serve_spa_index()
 
 

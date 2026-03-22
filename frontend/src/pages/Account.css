@@ -1,0 +1,269 @@
+.account-page {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 4rem;
+}
+
+.account-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2rem;
+}
+
+.account-header h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.account-logout-btn {
+  background: transparent;
+  border: 1px solid var(--border, #333);
+  color: var(--text-secondary, #aaa);
+  border-radius: 6px;
+  padding: 0.4rem 0.9rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.account-logout-btn:hover {
+  border-color: var(--accent, #4fc3f7);
+  color: var(--text, #fff);
+}
+
+.account-error {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #f87171;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+}
+
+.account-section {
+  background: var(--surface, #111);
+  border: 1px solid var(--border, #222);
+  border-radius: 10px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.account-section h2 {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary, #888);
+  margin: 0 0 1rem;
+}
+
+/* Perfil */
+.account-profile {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.account-avatar {
+  width: 52px;
+  height: 52px;
+  background: var(--accent, #4fc3f7);
+  color: #000;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.account-name {
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.account-email {
+  font-size: 0.85rem;
+  color: var(--text-secondary, #888);
+  margin-top: 0.15rem;
+}
+
+.account-role {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}
+
+.badge {
+  background: var(--bg, #0a0a0a);
+  border: 1px solid var(--border, #333);
+  border-radius: 4px;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.72rem;
+  color: var(--text-secondary, #aaa);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.badge-admin {
+  border-color: var(--accent, #4fc3f7);
+  color: var(--accent, #4fc3f7);
+}
+
+/* Plano */
+.account-plan-name {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+}
+
+.account-plan-features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+
+.feature-badge {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  border: 1px solid;
+}
+
+.feature-badge.on {
+  border-color: #22c55e;
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.feature-badge.off {
+  border-color: #444;
+  color: #666;
+}
+
+.account-storage-label {
+  font-size: 0.8rem;
+  color: var(--text-secondary, #888);
+  margin-bottom: 0.4rem;
+}
+
+.account-storage-bar {
+  height: 4px;
+  background: var(--border, #222);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+}
+
+.account-storage-fill {
+  height: 100%;
+  background: var(--accent, #4fc3f7);
+  transition: width 0.3s;
+}
+
+/* Dispositivos */
+.account-device {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--border, #1a1a1a);
+}
+
+.account-device:last-child {
+  border-bottom: none;
+}
+
+.account-device-name {
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.account-device-meta {
+  font-size: 0.75rem;
+  color: var(--text-secondary, #888);
+  margin-top: 0.15rem;
+}
+
+.account-revoke-btn {
+  background: transparent;
+  border: 1px solid var(--border, #333);
+  color: #f87171;
+  border-radius: 4px;
+  padding: 0.25rem 0.65rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.account-revoke-btn:hover {
+  border-color: #f87171;
+}
+
+.account-empty {
+  color: var(--text-secondary, #888);
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+/* Convites */
+.account-invite-hint {
+  font-size: 0.875rem;
+  color: var(--text-secondary, #888);
+  margin-bottom: 1rem;
+}
+
+.account-invite-code {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--bg, #0a0a0a);
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  padding: 0.6rem 0.85rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.8rem;
+  word-break: break-all;
+}
+
+.account-invite-code button {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--border, #333);
+  color: var(--text, #fff);
+  border-radius: 4px;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.account-btn {
+  background: var(--surface-2, #1a1a1a);
+  border: 1px solid var(--border, #333);
+  color: var(--text, #fff);
+  border-radius: 6px;
+  padding: 0.55rem 1rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.account-btn:hover {
+  border-color: var(--accent, #4fc3f7);
+}
+
+.account-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.account-plan-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}

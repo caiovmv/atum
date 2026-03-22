@@ -37,6 +37,19 @@ resources:
   - daemons/indexers-daemon.yaml
   - enrichment/deployment.yaml
 
+  # Storage (MinIO S3-compatible)
+  - minio/pvc.yaml
+  - minio/deployment.yaml
+  - minio/service.yaml
+
+  # Phase 2 daemons
+  - hls-daemon/deployment.yaml
+  - cloud-sync-daemon/deployment.yaml
+
+  # Backoffice admin frontend
+  - admin/deployment.yaml
+  - admin/service.yaml
+
   # Optional services
   - flaresolverr/deployment.yaml
   - flaresolverr/service.yaml
@@ -51,4 +64,6 @@ images:
   - name: ghcr.io/caiovmv/atum-frontend
     newTag: latest
   - name: ghcr.io/caiovmv/atum-enrichment
+    newTag: latest
+  - name: ghcr.io/caiovmv/atum-admin
     newTag: latest

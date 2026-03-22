@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloud-sync-daemon
+  namespace: atum
+  labels:
+    app: cloud-sync-daemon
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloud-sync-daemon
+  template:
+    metadata:
+      labels:
+        app: cloud-sync-daemon
+    spec:
+      containers:
+        - name: cloud-sync-daemon
+          image: ghcr.io/caiovmv/atum-api:latest
+          command: ["dl-torrent", "cloud-sync", "daemon", "--interval", "300"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: DATABASE_URL
+            - name: REDIS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: atum-config
+                  key: REDIS_URL
+            - name: LIBRARY_MUSIC_PATH
+              value: /library/music
+            - name: LIBRARY_VIDEOS_PATH
+              value: /library/videos
+            - name: MINIO_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: atum-config
+                  key: MINIO_ENDPOINT
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: MINIO_ROOT_USER
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: MINIO_ROOT_PASSWORD
+            - name: STORAGE_BACKEND
+              value: minio
+            - name: COLD_TIER_DAYS
+              valueFrom:
+                configMapKeyRef:
+                  name: atum-config
+                  key: COLD_TIER_DAYS
+                  optional: true
+            - name: STORAGE_PRESSURE_PCT
+              valueFrom:
+                configMapKeyRef:
+                  name: atum-config
+                  key: STORAGE_PRESSURE_PCT
+                  optional: true
+            - name: CLOUD_SYNC_HOURS
+              valueFrom:
+                configMapKeyRef:
+                  name: atum-config
+                  key: CLOUD_SYNC_HOURS
+                  optional: true
+            - name: PREFETCH_COUNT
+              value: "3"
+          volumeMounts:
+            - name: library
+              mountPath: /library/music
+              subPath: music
+            - name: library
+              mountPath: /library/videos
+              subPath: videos
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+      volumes:
+        - name: library
+          persistentVolumeClaim:
+            claimName: library

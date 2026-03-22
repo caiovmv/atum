@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hls-daemon
+  namespace: atum
+  labels:
+    app: hls-daemon
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hls-daemon
+  template:
+    metadata:
+      labels:
+        app: hls-daemon
+    spec:
+      containers:
+        - name: hls-daemon
+          image: ghcr.io/caiovmv/atum-api:latest
+          command: ["dl-torrent", "hls", "daemon", "--interval", "10", "--batch", "4"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: DATABASE_URL
+            - name: REDIS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: atum-config
+                  key: REDIS_URL
+            - name: DOWNLOAD_RUNNER_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: atum-config
+                  key: DOWNLOAD_RUNNER_URL
+            - name: LIBRARY_MUSIC_PATH
+              value: /library/music
+            - name: LIBRARY_VIDEOS_PATH
+              value: /library/videos
+            - name: MINIO_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: atum-config
+                  key: MINIO_ENDPOINT
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: MINIO_ROOT_USER
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: MINIO_ROOT_PASSWORD
+            - name: STORAGE_BACKEND
+              value: minio
+            - name: HLS_MAX_CONCURRENT_JOBS
+              value: "2"
+          volumeMounts:
+            - name: library
+              mountPath: /library/music
+              subPath: music
+            - name: library
+              mountPath: /library/videos
+              subPath: videos
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+      volumes:
+        - name: library
+          persistentVolumeClaim:
+            claimName: library

@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: admin-frontend
+  namespace: atum
+spec:
+  selector:
+    app: admin-frontend
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: admin-frontend
+  namespace: atum
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: Host(`admin.loombeat.com`)
+      kind: Rule
+      services:
+        - name: admin-frontend
+          port: 80
+      middlewares:
+        - name: security-headers
+          namespace: atum

@@ -1048,6 +1048,40 @@ def indexers_daemon_cmd(
 enrichment_app = typer.Typer(help="Daemon de enriquecimento de metadados (MusicBrainz, Last.fm, Spotify, TMDB, LLM).")
 app.add_typer(enrichment_app, name="enrichment")
 
+# ─── HLS Daemon ───────────────────────────────────────────────────────────────
+
+hls_app = typer.Typer(help="Daemon de transcodificação HLS com upload para MinIO.")
+app.add_typer(hls_app, name="hls")
+
+
+@hls_app.command("daemon")
+def hls_daemon_cmd(
+    interval: int = typer.Option(10, "--interval", "-i", help="Intervalo em segundos entre ciclos."),
+    batch: int = typer.Option(4, "--batch", "-b", help="Jobs por ciclo."),
+) -> None:
+    """Loop de transcodificação HLS: processa hls_jobs e faz upload para MinIO."""
+    import logging
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    from .daemons.hls_daemon import run_daemon
+    run_daemon(interval=interval, batch=batch)
+
+
+# ─── Cloud Sync Daemon ────────────────────────────────────────────────────────
+
+cloud_sync_app = typer.Typer(help="Daemon de sincronização cloud: cold tiering, prefetch, play positions.")
+app.add_typer(cloud_sync_app, name="cloud-sync")
+
+
+@cloud_sync_app.command("daemon")
+def cloud_sync_daemon_cmd(
+    interval: int = typer.Option(300, "--interval", "-i", help="Intervalo em segundos entre ciclos."),
+) -> None:
+    """Loop de sync cloud: cold tiering, storage pressure release, prefetch offline."""
+    import logging
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    from .daemons.cloud_sync_daemon import run_daemon
+    run_daemon(interval=interval)
+
 
 @enrichment_app.command("daemon")
 def enrichment_daemon_cmd(

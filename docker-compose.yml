@@ -282,6 +282,107 @@ services:
       - dl-torrent
     restart: unless-stopped
 
+  # ─── MinIO S3-compatible object storage ─────────────────────────────────────
+  # Buckets gerenciados automaticamente pelo storage_service no startup:
+  #   loombeat-hls    → segmentos HLS transcodificados
+  #   loombeat-music  → arquivos de áudio (alternativa ao filesystem)
+  #   loombeat-covers → capas de álbuns/filmes
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      MINIO_VOLUMES: /data
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"   # console web (dev/local only — não expor em produção)
+    healthcheck:
+      test: [ "CMD-SHELL", "mc ready local || exit 1" ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dl-torrent
+    restart: unless-stopped
+
+  # ─── HLS Daemon ──────────────────────────────────────────────────────────────
+  # Processa jobs de transcodificação da tabela hls_jobs e faz upload para MinIO.
+  # Isolado da API para não consumir CPU de transcodificação no mesmo processo.
+  hls-daemon:
+    image: ghcr.io/caiovmv/atum-api:v0.2.0
+    build:
+      context: .
+      dockerfile: Dockerfile
+    cap_add:
+      - SYS_PTRACE
+    command: [ "dl-torrent", "hls", "daemon", "--interval", "10", "--batch", "4" ]
+    environment:
+      - DATABASE_URL=postgresql://dluser:dlpass@postgres:5432/dltorrent
+      - REDIS_URL=redis://redis:6379/0
+      - DOWNLOAD_RUNNER_URL=http://runner:9092
+      - LIBRARY_MUSIC_PATH=/library/music
+      - LIBRARY_VIDEOS_PATH=/library/videos
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin123}
+      - STORAGE_BACKEND=${STORAGE_BACKEND:-minio}
+      - HLS_MAX_CONCURRENT_JOBS=${HLS_MAX_CONCURRENT_JOBS:-2}
+    volumes:
+      - ${LIBRARY_MUSIC_PATH:-./data/music}:/library/music
+      - ${LIBRARY_VIDEOS_PATH:-./data/videos}:/library/videos
+      - ./profiles:/profiles
+    tmpfs:
+      - /tmp:size=8G   # scratch space para FFmpeg
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      runner:
+        condition: service_healthy
+    networks:
+      - dl-torrent
+    restart: unless-stopped
+
+  # ─── Cloud Sync Daemon ───────────────────────────────────────────────────────
+  # Cold tiering, storage pressure release, play-position sync, prefetch.
+  cloud-sync-daemon:
+    image: ghcr.io/caiovmv/atum-api:v0.2.0
+    build:
+      context: .
+      dockerfile: Dockerfile
+    cap_add:
+      - SYS_PTRACE
+    command: [ "dl-torrent", "cloud-sync", "daemon", "--interval", "300" ]
+    environment:
+      - DATABASE_URL=postgresql://dluser:dlpass@postgres:5432/dltorrent
+      - REDIS_URL=redis://redis:6379/0
+      - LIBRARY_MUSIC_PATH=/library/music
+      - LIBRARY_VIDEOS_PATH=/library/videos
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin123}
+      - STORAGE_BACKEND=${STORAGE_BACKEND:-minio}
+      - COLD_TIER_DAYS=${COLD_TIER_DAYS:-90}
+      - STORAGE_PRESSURE_PCT=${STORAGE_PRESSURE_PCT:-85}
+      - CLOUD_SYNC_HOURS=${CLOUD_SYNC_HOURS:-}   # ex: "00:00-06:00"
+      - PREFETCH_COUNT=${PREFETCH_COUNT:-3}
+    volumes:
+      - ${LIBRARY_MUSIC_PATH:-./data/music}:/library/music
+      - ${LIBRARY_VIDEOS_PATH:-./data/videos}:/library/videos
+      - ./profiles:/profiles
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - dl-torrent
+    restart: unless-stopped
+
   ollama:
     image: ollama/ollama
     volumes:
@@ -361,6 +462,7 @@ volumes:
   api_covers:
   nginx_certs:
   ollama_models:
+  minio_data:
   android_build_jdk:
   android_build_sdk:
   android_build_bubblewrap:

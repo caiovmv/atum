@@ -95,13 +95,50 @@ class Settings(BaseSettings):
     # Persistência: PostgreSQL (obrigatório). Ex.: postgresql://user:pass@host:5432/dbname
     database_url: str = ""
 
-    # Basic auth entre frontend e API: quando definidos, a API exige Authorization: Basic.
-    # O nginx (frontend) adiciona o header ao fazer proxy. Protege a API quando exposta via tunnel.
+    # Basic auth (legado): mantido apenas para compatibilidade retroativa.
+    # Quando jwt_secret estiver configurado, o _JWTAuthMiddleware tem precedência.
     basic_auth_user: str = ""
     basic_auth_pass: str = ""
 
     # Cache: se definido, usa Redis para cache de capas/TMDB (ex.: redis://redis:6379/0).
     redis_url: str = ""
+
+    # ─── JWT Auth ────────────────────────────────────────────────────────────
+    # jwt_secret: chave secreta para assinar tokens. Deve ser gerada com:
+    #   python -c "import secrets; print(secrets.token_hex(32))"
+    jwt_secret: str = ""
+    jwt_access_expire_min: int = 15
+    jwt_refresh_expire_days: int = 30
+
+    # registration_open: False = apenas por convite (padrão seguro)
+    registration_open: bool = False
+
+    # Credenciais do admin inicial. Criado automaticamente no primeiro startup.
+    admin_email: str = ""
+    admin_password: str = ""
+
+    # ─── Stripe ──────────────────────────────────────────────────────────────
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+    stripe_publishable_key: str = ""
+
+    # ─── MinIO / S3 Storage ──────────────────────────────────────────────────
+    # STORAGE_BACKEND = minio | local
+    storage_backend: str = "local"
+    minio_endpoint: str = "http://localhost:9000"
+    minio_access_key: str = "minioadmin"
+    minio_secret_key: str = "minioadmin123"
+    minio_region: str = "us-east-1"
+
+    # ─── Cloud Sync ──────────────────────────────────────────────────────────
+    # Arquivos não tocados há N dias são candidatos a cold tiering
+    cold_tier_days: int = 90
+    # Pressão de disco (%) para acionar cold tiering emergencial
+    storage_pressure_pct: int = 85
+    # Janela de horário para sync (ex: "00:00-06:00"). Vazio = sem restrição.
+    cloud_sync_hours: str = ""
+    # Quantidade de tracks seguintes a pré-baixar na fila de reprodução
+    prefetch_count: int = 3
 
     @property
     def watch_folder_path(self) -> Path:

@@ -101,6 +101,18 @@ jobs:
           cache-from: type=gha,scope=enrichment
           cache-to: type=gha,mode=max,scope=enrichment
 
+      - name: Build and push Admin Frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.admin
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/atum-admin:${{ steps.tag.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/atum-admin:latest
+          cache-from: type=gha,scope=admin
+          cache-to: type=gha,mode=max,scope=admin
+
   deploy:
     name: Deploy to Kubernetes
     needs: build-and-push
