@@ -27,8 +27,8 @@ spec:
                   key: DATABASE_URL
             - name: REDIS_URL
               valueFrom:
-                configMapKeyRef:
-                  name: atum-config
+                secretKeyRef:
+                  name: atum-secrets
                   key: REDIS_URL
             - name: DOWNLOAD_RUNNER_URL
               valueFrom:
