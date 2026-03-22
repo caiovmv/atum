@@ -118,8 +118,7 @@ def create_access_token(user_row: dict[str, Any], device_id: str, plan_code: str
 
 
 def create_refresh_token(user_id: str, device_id: str) -> tuple[str, str]:
-    """Retorna (raw_token, token_hash). Persiste apenas o hash no banco."""
-    raw = secrets.token_urlsafe(48)
+    """Retorna (signed_jwt, token_hash). Persiste apenas o hash no banco."""
     settings = get_settings()
     now = datetime.now(timezone.utc)
     payload = {
