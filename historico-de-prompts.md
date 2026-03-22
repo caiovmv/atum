@@ -89,3 +89,27 @@ continuar (em resposta ao diagnóstico: _jobs leak, sem semáforo FFmpeg, shaka 
 - `frontend/src/types/shaka-player.d.ts` (novo): declarações TypeScript para a API do Shaka Player
 - `ShakaPlayer.tsx`: `any` substituído por tipos `ShakaModule` e `ShakaPlayer`; 4 novos testes no backend (total: 40 testes passando)
 - Tag v1.13.5 criada e publicada
+
+### Prompt 10
+
+"crie o arquivo e implemente o plano" (POSICIONAMENTO.md + Phase 2 completa)
+
+**Resultado:** v2.0.0 — implementação completa da Phase 2 em 66 arquivos:
+- `docs/POSICIONAMENTO.md`: análise fria e técnica comparando Atum com concorrentes (Plex, Jellyfin, Navidrome, Roon, arr stack, Spotify/Tidal) com scorecard, posicionamento, fraquezas e oportunidades
+- Migrations 014–017: `plans`, `families`, `users`, `user_devices`, `refresh_tokens`, `invite_codes`, `storage_addons`, `subscriptions`, `payments`, `promo_codes`, `audit_log`, `hls_jobs`, `play_positions`, `cloud_sync_queue`; data ownership via `family_id` em todas as tabelas existentes
+- `storage_service.py`: abstração S3/local com `MinIOBackend` (boto3) e `LocalBackend` (filesystem); factory por `STORAGE_BACKEND` env; helpers de convenção de chaves; `init_storage()` no startup
+- `auth_service.py`: bcrypt, PyJWT (HS256), `AuthUser`, `create_access_token`, `create_refresh_token`, `get_current_user`, `require_backoffice`, `require_owner`, `seed_admin_user`
+- `routers/auth.py`: `POST /api/auth/register`, `login`, `refresh`, `logout`, `GET /me`, `GET /devices`, `DELETE /devices/{id}`, `POST /invite`
+- `web/app.py`: `_JWTAuthMiddleware` com fallback para BasicAuth; `seed_admin_user` e `init_storage` no lifespan; routers auth/admin/stripe incluídos
+- `config.py`: `jwt_secret`, `jwt_access_expire_min`, `jwt_refresh_expire_days`, `registration_open`, `admin_email`, `admin_password`, `stripe_*`, `minio_*`, `cold_tier_days`, `storage_pressure_pct`, `cloud_sync_hours`, `prefetch_count`
+- `daemons/hls_daemon.py`: daemon isolado com polling de `hls_jobs`, FFmpeg com upload incremental de segmentos para MinIO, estratégias on_demand/automatic/lru, evicção LRU, CLI `dl-torrent hls daemon`
+- `daemons/cloud_sync_daemon.py`: cold tiering, storage pressure release, janela de horário de sync, offline prefetch, processamento da fila `cloud_sync_queue`, CLI `dl-torrent cloud-sync daemon`
+- `library.py`: endpoints HLS v2 (`/start`, `/status-v2`, `/presign/{path}`) baseados em DB jobs + presigned MinIO URLs
+- `routers/admin/`: pacote completo com users, plans, subscriptions, financial (MRR/ARR/churn/revenue chart), invites, promo_codes, settings (platform-level), storage (MinIO/HLS/sync overview)
+- `stripe_service.py + stripe_webhooks.py`: checkout session, customer portal, webhook com validação HMAC, handlers para subscription.created/updated/deleted, invoice.payment_succeeded/failed
+- Frontend: `AuthContext` com auto-refresh, `api/auth.ts`, páginas `Login`, `Register`, `Account` (devices, plano, convites), `RequireAuth` guard em `App.tsx`
+- `frontend-admin/`: Vite+React para `admin.loombeat.com` com layout, login (verifica `backoffice_role`), Dashboard (MRR/ARR/churn), Users, Plans, Subscriptions, Financial, Invites, PromoCodes, Storage, PlatformSettings
+- `Dockerfile.admin` + `k8s/admin/` + `k8s/minio/` + `k8s/hls-daemon/` + `k8s/cloud-sync-daemon/`
+- `docker-compose.yml`: serviços `minio`, `hls-daemon`, `cloud-sync-daemon`
+- `kustomization.yaml` + GitHub Actions: build/push da imagem `atum-admin`
+- Tag v2.0.0 criada e publicada
