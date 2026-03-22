@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # 1) Copiar apenas metadados de dependências e instalar (cache de deps)
 COPY pyproject.toml ./
+RUN pip install --upgrade pip
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-cache-dir --pre -e ".[ai]" || true
 

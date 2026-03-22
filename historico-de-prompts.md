@@ -165,3 +165,9 @@ voce padronizou os builds ? / sim
 **Resultado:**
 1. Gerado `frontend-admin/package-lock.json` via `npm install --package-lock-only` (Node v22 no host)
 2. `Dockerfile.admin`: substituído `npm run build` (`tsc && vite build`) por `npx vite build` — mesmo padrão adotado no `Dockerfile.frontend`
+
+### Prompt 11
+
+include pip upgrade before installing packages in all Dockerfiles that use python
+
+**Resultado:** Adicionado `RUN pip install --upgrade pip` antes do primeiro `pip install` em `Dockerfile` e `Dockerfile.enrichment` (únicos com Python). Camada separada para aproveitar cache do Docker. Builds testados localmente antes do commit.
