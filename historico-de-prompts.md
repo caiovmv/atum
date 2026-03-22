@@ -113,3 +113,16 @@ continuar (em resposta ao diagnóstico: _jobs leak, sem semáforo FFmpeg, shaka 
 - `docker-compose.yml`: serviços `minio`, `hls-daemon`, `cloud-sync-daemon`
 - `kustomization.yaml` + GitHub Actions: build/push da imagem `atum-admin`
 - Tag v2.0.0 criada e publicada
+
+### Prompt 6
+
+sim por favor
+
+**Resultado:** v2.0.1 — correção de 6 bugs críticos de produção introduzidos na v2.0.0:
+1. `requirements.txt`: adicionado `bcrypt>=4.0.0`, `PyJWT>=2.8.0`, `stripe>=8.0.0`, `boto3>=1.34.0` (dependências da Phase 2 ausentes)
+2. `routers/auth.py`: corrigido import de `...db` (inexistente) para `...db_postgres.get_async_pool`
+3. `auth_service.py`: adicionados helpers pré-construídos `require_super_admin`, `require_financial`, `require_support`, `require_any_backoffice` (funções FastAPI-resolvíveis sem precisar de `Depends()` manual)
+4. Todos admin routers: substituído `actor: AuthUser = require_backoffice(...)` (inválido como default) por `actor: AuthUser = Depends(require_*)` (padrão correto do FastAPI)
+5. `k8s/secret.yaml`: adicionados `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `STRIPE_*` ao secret existente + novo secret `minio-secret` separado para rotação independente
+6. `k8s/configmap.yaml`: adicionadas variáveis `STORAGE_BACKEND`, `MINIO_ENDPOINT`, `MINIO_REGION`, `HLS_MAX_CONCURRENT_JOBS`, `COLD_TIER_DAYS`, `STORAGE_PRESSURE_PCT`, `CLOUD_SYNC_HOURS`, `PREFETCH_COUNT`, `JWT_ACCESS_EXPIRE_MIN`, `JWT_REFRESH_EXPIRE_DAYS`, `REGISTRATION_OPEN`
+7. `.env.example`: documentadas todas as novas variáveis da Phase 2 com comentários e instruções
